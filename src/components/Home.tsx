@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Folder, FileText, ChevronDown, Check, Edit, Trash2 } from "lucide-react";
+import { Folder, FileText, Check, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -193,27 +193,30 @@ export const Home = () => {
   };
 
   const saveFolderEdit = async () => {
-    if (!editingFolderId || !editingFolderName.trim()) return;
+    if (!editingFolderId) return;
+
+    const trimmedName = editingFolderName.trim();
+    if (!trimmedName) {
+      setEditingFolderId(null);
+      setEditingFolderName("");
+      return;
+    }
 
     const { error } = await supabase
       .from("folders")
-      .update({ name: editingFolderName.trim() })
+      .update({ name: trimmedName })
       .eq("id", editingFolderId);
 
     if (error) {
       toast({ title: "Error updating folder", description: error.message, variant: "destructive" });
     } else {
-      setFolders(folders.map(f => f.id === editingFolderId ? { ...f, name: editingFolderName.trim() } : f));
+      setFolders(folders.map(f => f.id === editingFolderId ? { ...f, name: trimmedName } : f));
       setEditingFolderId(null);
       setEditingFolderName("");
       toast({ title: "Folder updated successfully" });
     }
   };
 
-  const cancelFolderEdit = () => {
-    setEditingFolderId(null);
-    setEditingFolderName("");
-  };
 
   const startEditingJournal = (journal: Journal) => {
     setEditingJournalId(journal.id);
@@ -221,27 +224,30 @@ export const Home = () => {
   };
 
   const saveJournalEdit = async () => {
-    if (!editingJournalId || !editingJournalTitle.trim()) return;
+    if (!editingJournalId) return;
+
+    const trimmedTitle = editingJournalTitle.trim();
+    if (!trimmedTitle) {
+      setEditingJournalId(null);
+      setEditingJournalTitle("");
+      return;
+    }
 
     const { error } = await supabase
       .from("journals")
-      .update({ title: editingJournalTitle.trim() })
+      .update({ title: trimmedTitle })
       .eq("id", editingJournalId);
 
     if (error) {
       toast({ title: "Error updating journal", description: error.message, variant: "destructive" });
     } else {
-      setJournals(journals.map(j => j.id === editingJournalId ? { ...j, title: editingJournalTitle.trim() } : j));
+      setJournals(journals.map(j => j.id === editingJournalId ? { ...j, title: trimmedTitle } : j));
       setEditingJournalId(null);
       setEditingJournalTitle("");
       toast({ title: "Journal updated successfully" });
     }
   };
 
-  const cancelJournalEdit = () => {
-    setEditingJournalId(null);
-    setEditingJournalTitle("");
-  };
 
   const confirmDeleteJournal = (journal: Journal) => {
     setConfirmState({ open: true, kind: "journal", id: journal.id, title: journal.title });
@@ -307,9 +313,15 @@ export const Home = () => {
                       onChange={(e) => setEditingFolderName(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') saveFolderEdit();
-                        if (e.key === 'Escape') cancelFolderEdit();
                       }}
-                      onBlur={saveFolderEdit}
+                      onBlur={() => {
+                        if (editingFolderName.trim()) {
+                          saveFolderEdit();
+                        } else {
+                          setEditingFolderId(null);
+                          setEditingFolderName("");
+                        }
+                      }}
                       className="flex-1 bg-transparent border-b border-primary outline-none text-foreground font-medium"
                       autoFocus
                     />
@@ -319,26 +331,15 @@ export const Home = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   {editingFolderId === folder.id ? (
-                    <>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          saveFolderEdit();
-                        }}
-                        className="opacity-100 p-1 hover:bg-green-100 rounded transition-colors"
-                      >
-                        <Check className="w-4 h-4 text-green-600" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          cancelFolderEdit();
-                        }}
-                        className="opacity-100 p-1 hover:bg-gray-100 rounded transition-colors"
-                      >
-                        <ChevronDown className="w-4 h-4 text-gray-600 rotate-90" />
-                      </button>
-                    </>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        saveFolderEdit();
+                      }}
+                      className="opacity-100 p-1 hover:bg-green-100 rounded transition-colors"
+                    >
+                      <Check className="w-4 h-4 text-green-600" />
+                    </button>
                   ) : (
                     <>
                       <button
@@ -432,9 +433,15 @@ export const Home = () => {
                       onChange={(e) => setEditingJournalTitle(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') saveJournalEdit();
-                        if (e.key === 'Escape') cancelJournalEdit();
                       }}
-                      onBlur={saveJournalEdit}
+                      onBlur={() => {
+                        if (editingJournalTitle.trim()) {
+                          saveJournalEdit();
+                        } else {
+                          setEditingJournalId(null);
+                          setEditingJournalTitle("");
+                        }
+                      }}
                       className="flex-1 bg-transparent border-b border-primary outline-none text-foreground font-medium"
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
@@ -445,26 +452,15 @@ export const Home = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   {editingJournalId === journal.id ? (
-                    <>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          saveJournalEdit();
-                        }}
-                        className="opacity-100 p-1 hover:bg-green-100 rounded transition-colors"
-                      >
-                        <Check className="w-4 h-4 text-green-600" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          cancelJournalEdit();
-                        }}
-                        className="opacity-100 p-1 hover:bg-gray-100 rounded transition-colors"
-                      >
-                        <ChevronDown className="w-4 h-4 text-gray-600 rotate-90" />
-                      </button>
-                    </>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        saveJournalEdit();
+                      }}
+                      className="opacity-100 p-1 hover:bg-green-100 rounded transition-colors"
+                    >
+                      <Check className="w-4 h-4 text-green-600" />
+                    </button>
                   ) : (
                     <>
                       <button
