@@ -31,7 +31,7 @@ BEGIN
     PERFORM cron.schedule(
       'purge_trashed_journals',
       '0 3 * * *',
-      $$select public.purge_trashed_journals();$$
+      'SELECT public.purge_trashed_journals();'
     );
   END IF;
 END $$;

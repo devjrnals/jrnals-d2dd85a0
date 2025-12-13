@@ -31,6 +31,10 @@ const Dashboard = () => {
     <div className="signed-in-theme flex h-screen overflow-hidden bg-background">
       <Sidebar />
       <Home />
+      {/* Debug info */}
+      <div style={{ position: 'fixed', bottom: '10px', right: '10px', background: 'red', color: 'white', padding: '10px', borderRadius: '5px', fontSize: '12px' }}>
+        Dashboard Loaded - User: {user?.email || 'No user'}
+      </div>
     </div>
   );
 };

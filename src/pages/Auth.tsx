@@ -16,6 +16,9 @@ export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  // Debug: Check if Supabase is connected
+  console.log('Auth component loaded, Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
