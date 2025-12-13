@@ -54,9 +54,6 @@ export const Home = () => {
   const loadData = async () => {
     if (!user) return;
 
-    // Best-effort cleanup: permanently delete journals that have been in Trash for 30+ days.
-    await purgeExpiredTrashedJournals();
-
     // Determine sort order
     const getSortConfig = () => {
       switch (sortBy) {
@@ -84,10 +81,8 @@ export const Home = () => {
     ]);
 
     if (journalsRes.error) {
-      console.error("Error loading journals:", journalsRes.error);
       toast({ title: "Error loading journals", description: journalsRes.error.message, variant: "destructive" });
     } else {
-      console.log("Loaded journals:", journalsRes.data);
       setJournals(journalsRes.data || []);
     }
 
@@ -290,7 +285,6 @@ export const Home = () => {
               <FileText className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
               <span className="text-foreground font-medium">Create journal</span>
             </button>
-            {console.log("Rendering journals:", journals)}
             {journals.map((journal) => (
               <div
                 key={journal.id}
