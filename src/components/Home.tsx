@@ -1,6 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { Folder, FileText, ChevronDown } from "lucide-react";
+import { Folder, FileText, ChevronDown, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,6 +27,7 @@ type Folder = {
 
 export const Home = () => {
   const [activeFilter, setActiveFilter] = useState("owned");
+  const [sortBy, setSortBy] = useState<"updated_desc" | "updated_asc" | "title_desc" | "title_asc">("updated_desc");
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -42,7 +49,7 @@ export const Home = () => {
     if (user) {
       loadData();
     }
-  }, [user]);
+  }, [user, sortBy]);
 
   const loadData = async () => {
     if (!user) return;
@@ -50,13 +57,30 @@ export const Home = () => {
     // Best-effort cleanup: permanently delete journals that have been in Trash for 30+ days.
     await purgeExpiredTrashedJournals();
 
+    // Determine sort order
+    const getSortConfig = () => {
+      switch (sortBy) {
+        case "updated_asc":
+          return { column: "updated_at", ascending: true };
+        case "title_desc":
+          return { column: "title", ascending: false };
+        case "title_asc":
+          return { column: "title", ascending: true };
+        case "updated_desc":
+        default:
+          return { column: "updated_at", ascending: false };
+      }
+    };
+
+    const sortConfig = getSortConfig();
+
     const [journalsRes, foldersRes] = await Promise.all([
       supabase
         .from("journals")
         .select("*")
-        .is("trashed_at", null)
-        .order("updated_at", { ascending: false }),
-      supabase.from("folders").select("*").order("created_at", { ascending: false })
+        .eq("user_id", user.id)
+        .order(sortConfig.column, { ascending: sortConfig.ascending }),
+      supabase.from("folders").select("*").eq("user_id", user.id).order("created_at", { ascending: false })
     ]);
 
     if (journalsRes.error) {
@@ -223,10 +247,35 @@ export const Home = () => {
 
             <div className="flex items-center gap-2 text-foreground">
               <span className="text-sm">Sort by:</span>
-              <Button variant="ghost" size="sm" className="text-foreground">
-                Last edited (newest)
-                <ChevronDown className="w-4 h-4 ml-2" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-foreground">
+                    {sortBy === "updated_desc" && "Last edited (newest)"}
+                    {sortBy === "updated_asc" && "Last edited (oldest)"}
+                    {sortBy === "title_desc" && "Title (Z-A)"}
+                    {sortBy === "title_asc" && "Title (A-Z)"}
+                    <ChevronDown className="w-4 h-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => setSortBy("updated_desc")}>
+                    <Check className={`w-4 h-4 mr-2 ${sortBy === "updated_desc" ? "opacity-100" : "opacity-0"}`} />
+                    Last edited (newest)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("updated_asc")}>
+                    <Check className={`w-4 h-4 mr-2 ${sortBy === "updated_asc" ? "opacity-100" : "opacity-0"}`} />
+                    Last edited (oldest)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("title_desc")}>
+                    <Check className={`w-4 h-4 mr-2 ${sortBy === "title_desc" ? "opacity-100" : "opacity-0"}`} />
+                    Title (Z-A)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("title_asc")}>
+                    <Check className={`w-4 h-4 mr-2 ${sortBy === "title_asc" ? "opacity-100" : "opacity-0"}`} />
+                    Title (A-Z)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
