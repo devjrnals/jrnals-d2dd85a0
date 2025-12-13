@@ -2,8 +2,9 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Temporarily set environment variables directly for testing
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://xfbxmheoblotlhpveugv.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhmYnhtaGVvYmxvdGxocHZldWd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU2MjYzNjEsImV4cCI6MjA4MTIwMjM2MX0.yBIInGGxuQKwYQcC6hFBy7rp_MXpbyHr3_DBdg9qa7M";
 
 // Debug: Check if env vars are loaded
 console.log('SUPABASE_URL:', SUPABASE_URL);
