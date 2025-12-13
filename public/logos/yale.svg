@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" role="img" aria-label="Yale University">
+  <rect width="200" height="240" rx="18" fill="#0F4D92"/>
+  <rect x="18" y="18" width="164" height="204" rx="14" fill="none" stroke="#f5f5f5" stroke-width="8"/>
+  <path d="M70 190l30-90 30 90" fill="none" stroke="#f5f5f5" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M92 138h36" stroke="#f5f5f5" stroke-width="10" stroke-linecap="round"/>
+</svg>
+

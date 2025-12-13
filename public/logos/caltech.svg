@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" role="img" aria-label="Caltech">
+  <circle cx="110" cy="110" r="102" fill="#F26600"/>
+  <circle cx="110" cy="110" r="92" fill="none" stroke="#ffffff" stroke-width="10"/>
+  <text x="50%" y="54%" font-size="84" font-family="Arial, sans-serif" font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">
+    C
+  </text>
+  <text x="50%" y="72%" font-size="44" font-family="Arial, sans-serif" font-weight="600" fill="#ffffff" text-anchor="middle">
+    altech
+  </text>
+</svg>
+

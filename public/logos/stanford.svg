@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" role="img" aria-label="Stanford University">
+  <rect width="200" height="240" rx="18" fill="#8C1515"/>
+  <path d="M70 40h60v160H70z" fill="#8C1515" stroke="#f8f8f8" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M100 70c10 16 10 30 0 46-8 14-10 26 0 38" fill="none" stroke="#2D6E36" stroke-width="10" stroke-linecap="round"/>
+  <path d="M86 88h28" stroke="#f8f8f8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M86 122h28" stroke="#f8f8f8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M86 156h28" stroke="#f8f8f8" stroke-width="8" stroke-linecap="round"/>
+</svg>
+

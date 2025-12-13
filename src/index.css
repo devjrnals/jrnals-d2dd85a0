@@ -2,90 +2,148 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=Outfit:wght@300;400;500&display=swap');
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
 
 @layer base {
   :root {
-    --background: 40 20% 98%;
-    --foreground: 30 10% 15%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
 
-    --card: 40 15% 96%;
-    --card-foreground: 30 10% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
 
-    --popover: 40 20% 98%;
-    --popover-foreground: 30 10% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
 
-    --primary: 30 10% 15%;
-    --primary-foreground: 40 20% 98%;
+    --primary: 142 76% 45%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 35 15% 92%;
-    --secondary-foreground: 30 10% 25%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 10%;
 
-    --muted: 35 10% 90%;
-    --muted-foreground: 30 8% 50%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
 
-    --accent: 35 15% 92%;
-    --accent-foreground: 30 10% 15%;
+    --accent: 142 76% 45%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 35 15% 88%;
-    --input: 35 15% 88%;
-    --ring: 30 10% 15%;
+    --border: 0 0% 90%;
+    --input: 0 0% 96%;
+    --ring: 142 76% 45%;
 
     --radius: 0.5rem;
 
-    --font-display: 'Cormorant Garamond', serif;
-    --font-body: 'Outfit', sans-serif;
-
-    --sidebar-background: 40 15% 96%;
-    --sidebar-foreground: 30 10% 25%;
-    --sidebar-primary: 30 10% 15%;
-    --sidebar-primary-foreground: 40 20% 98%;
-    --sidebar-accent: 35 15% 92%;
-    --sidebar-accent-foreground: 30 10% 15%;
-    --sidebar-border: 35 15% 88%;
-    --sidebar-ring: 30 10% 15%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 20%;
+    --sidebar-primary: 142 76% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 93%;
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 142 76% 45%;
+    
+    --editor-background: 0 0% 97%;
+    --suggestion-hover: 0 0% 94%;
+    
+    --transition-smooth: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .dark {
-    --background: 30 10% 8%;
-    --foreground: 40 15% 92%;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 95%;
 
-    --card: 30 10% 10%;
-    --card-foreground: 40 15% 92%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 30 10% 8%;
-    --popover-foreground: 40 15% 92%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 40 15% 92%;
-    --primary-foreground: 30 10% 8%;
+    --primary: 142 76% 45%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 30 8% 15%;
-    --secondary-foreground: 40 15% 85%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 95%;
 
-    --muted: 30 8% 18%;
-    --muted-foreground: 35 10% 55%;
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 60%;
 
-    --accent: 30 8% 15%;
-    --accent-foreground: 40 15% 92%;
+    --accent: 142 76% 45%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62% 30%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 30 8% 18%;
-    --input: 30 8% 18%;
-    --ring: 40 15% 85%;
+    --border: 0 0% 20%;
+    --input: 0 0% 15%;
+    --ring: 142 76% 45%;
 
-    --sidebar-background: 30 10% 10%;
-    --sidebar-foreground: 40 15% 85%;
-    --sidebar-primary: 40 15% 92%;
-    --sidebar-primary-foreground: 30 10% 8%;
-    --sidebar-accent: 30 8% 15%;
-    --sidebar-accent-foreground: 40 15% 92%;
-    --sidebar-border: 30 8% 18%;
-    --sidebar-ring: 40 15% 85%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 75%;
+    --sidebar-primary: 142 76% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 0 0% 12%;
+    --sidebar-ring: 142 76% 45%;
+    
+    --editor-background: 0 0% 11%;
+    --suggestion-hover: 0 0% 15%;
+  }
+
+  /* Signed-in (app) purple theme overrides */
+  .signed-in-theme {
+    /* Primary: #A268FF */
+    --primary: 263 100% 70%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 263 100% 70%;
+
+    /* Softer purples for secondary/hover states: #DCC7FF-ish */
+    --secondary: 263 100% 89%;
+    --secondary-foreground: 263 40% 22%;
+    --accent: 263 100% 89%;
+    --accent-foreground: 263 40% 22%;
+
+    --muted: 263 60% 96%;
+    --muted-foreground: 263 12% 40%;
+    --border: 263 35% 90%;
+    --input: 263 60% 96%;
+
+    /* Sidebar palette (used heavily in Dashboard) */
+    --sidebar-primary: 263 100% 70%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 263 60% 96%;
+    --sidebar-accent-foreground: 263 40% 22%;
+    --sidebar-border: 263 35% 90%;
+    --sidebar-ring: 263 100% 70%;
+  }
+
+  .dark .signed-in-theme {
+    /* Keep primary the same; adjust interaction surfaces for dark mode */
+    --primary: 263 100% 70%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 263 100% 70%;
+
+    --secondary: 263 35% 18%;
+    --secondary-foreground: 0 0% 95%;
+    --accent: 263 35% 18%;
+    --accent-foreground: 0 0% 95%;
+
+    --muted: 263 28% 16%;
+    --muted-foreground: 263 18% 72%;
+    --border: 263 25% 22%;
+    --input: 263 28% 16%;
+
+    --sidebar-accent: 263 25% 12%;
+    --sidebar-accent-foreground: 0 0% 92%;
+    --sidebar-border: 263 25% 18%;
+    --sidebar-ring: 263 100% 70%;
+    --sidebar-primary: 263 100% 70%;
+    --sidebar-primary-foreground: 0 0% 100%;
   }
 }
 
@@ -95,48 +153,43 @@
   }
 
   body {
-    @apply bg-background text-foreground font-body antialiased;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-display;
+    @apply bg-background text-foreground;
   }
 }
 
 @layer utilities {
-  .font-display {
-    font-family: var(--font-display);
+  @keyframes marquee {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
   }
 
-  .font-body {
-    font-family: var(--font-body);
+  .animate-marquee {
+    animation: marquee 32s linear infinite;
   }
-}
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
+  /* Fades the left/right edges of the marquee so logos smoothly fade in/out */
+  .marquee-edge-fade {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 12%,
+      black 88%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      black 12%,
+      black 88%,
+      transparent 100%
+    );
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes subtle-pulse {
-  0%, 100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.8s ease-out forwards;
-}
-
-.animate-subtle-pulse {
-  animation: subtle-pulse 3s ease-in-out infinite;
 }
