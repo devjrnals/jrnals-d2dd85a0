@@ -139,6 +139,8 @@ export const Home = () => {
     if (error) {
       toast({ title: "Error creating journal", variant: "destructive" });
     } else {
+      // Refresh the journals list to show the new journal
+      await loadData();
       navigate(`/journal/${data.id}`);
     }
   };
