@@ -84,8 +84,10 @@ export const Home = () => {
     ]);
 
     if (journalsRes.error) {
+      console.error("Error loading journals:", journalsRes.error);
       toast({ title: "Error loading journals", description: journalsRes.error.message, variant: "destructive" });
     } else {
+      console.log("Loaded journals:", journalsRes.data);
       setJournals(journalsRes.data || []);
     }
 
@@ -139,8 +141,7 @@ export const Home = () => {
     if (error) {
       toast({ title: "Error creating journal", variant: "destructive" });
     } else {
-      // Refresh the journals list to show the new journal
-      await loadData();
+      // Instantly navigate to the new journal (don't wait for data refresh)
       navigate(`/journal/${data.id}`);
     }
   };
@@ -289,6 +290,7 @@ export const Home = () => {
               <FileText className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
               <span className="text-foreground font-medium">Create journal</span>
             </button>
+            {console.log("Rendering journals:", journals)}
             {journals.map((journal) => (
               <div
                 key={journal.id}
