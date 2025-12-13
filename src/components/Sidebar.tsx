@@ -141,10 +141,11 @@ export const Sidebar = () => {
           toast({ title: "Error loading journals", description: retry.error.message, variant: "destructive" });
         } else {
           setJournals(retry.data || []);
-          toast({
-            title: "Trash not configured yet",
-            description: "Your database is missing the 'trashed_at' column. Journals are shown normally for now.",
-          });
+          // Temporarily disabled - applying migration to add trashed_at column
+          // toast({
+          //   title: "Trash not configured yet",
+          //   description: "Your database is missing the 'trashed_at' column. Journals are shown normally for now.",
+          // });
         }
         return;
       }
