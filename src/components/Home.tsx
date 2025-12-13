@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Folder, FileText, ChevronDown, Check } from "lucide-react";
+import { Folder, FileText, ChevronDown, Check, Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,6 +28,10 @@ type Folder = {
 export const Home = () => {
   const [activeFilter, setActiveFilter] = useState("owned");
   const [sortBy, setSortBy] = useState<"updated_desc" | "updated_asc" | "title_desc" | "title_asc">("updated_desc");
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState("");
+  const [editingJournalId, setEditingJournalId] = useState<string | null>(null);
+  const [editingJournalTitle, setEditingJournalTitle] = useState("");
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -168,8 +172,79 @@ export const Home = () => {
     }
   };
 
+  const deleteJournal = async (journalId: string) => {
+    const { error } = await supabase.from("journals").delete().eq("id", journalId);
+
+    if (error) {
+      toast({ title: "Error deleting journal", variant: "destructive" });
+    } else {
+      setJournals(journals.filter(j => j.id !== journalId));
+      toast({ title: "Journal deleted successfully" });
+    }
+  };
+
   const confirmDeleteFolder = (folder: Folder) => {
     setConfirmState({ open: true, kind: "folder", id: folder.id, title: folder.name });
+  };
+
+  const startEditingFolder = (folder: Folder) => {
+    setEditingFolderId(folder.id);
+    setEditingFolderName(folder.name);
+  };
+
+  const saveFolderEdit = async () => {
+    if (!editingFolderId || !editingFolderName.trim()) return;
+
+    const { error } = await supabase
+      .from("folders")
+      .update({ name: editingFolderName.trim() })
+      .eq("id", editingFolderId);
+
+    if (error) {
+      toast({ title: "Error updating folder", description: error.message, variant: "destructive" });
+    } else {
+      setFolders(folders.map(f => f.id === editingFolderId ? { ...f, name: editingFolderName.trim() } : f));
+      setEditingFolderId(null);
+      setEditingFolderName("");
+      toast({ title: "Folder updated successfully" });
+    }
+  };
+
+  const cancelFolderEdit = () => {
+    setEditingFolderId(null);
+    setEditingFolderName("");
+  };
+
+  const startEditingJournal = (journal: Journal) => {
+    setEditingJournalId(journal.id);
+    setEditingJournalTitle(journal.title);
+  };
+
+  const saveJournalEdit = async () => {
+    if (!editingJournalId || !editingJournalTitle.trim()) return;
+
+    const { error } = await supabase
+      .from("journals")
+      .update({ title: editingJournalTitle.trim() })
+      .eq("id", editingJournalId);
+
+    if (error) {
+      toast({ title: "Error updating journal", description: error.message, variant: "destructive" });
+    } else {
+      setJournals(journals.map(j => j.id === editingJournalId ? { ...j, title: editingJournalTitle.trim() } : j));
+      setEditingJournalId(null);
+      setEditingJournalTitle("");
+      toast({ title: "Journal updated successfully" });
+    }
+  };
+
+  const cancelJournalEdit = () => {
+    setEditingJournalId(null);
+    setEditingJournalTitle("");
+  };
+
+  const confirmDeleteJournal = (journal: Journal) => {
+    setConfirmState({ open: true, kind: "journal", id: journal.id, title: journal.title });
   };
 
   return (
@@ -225,10 +300,67 @@ export const Home = () => {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <Folder className="w-8 h-8 text-primary shrink-0" />
-                  <span className="text-foreground font-medium truncate">{folder.name}</span>
+                  {editingFolderId === folder.id ? (
+                    <input
+                      type="text"
+                      value={editingFolderName}
+                      onChange={(e) => setEditingFolderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveFolderEdit();
+                        if (e.key === 'Escape') cancelFolderEdit();
+                      }}
+                      onBlur={saveFolderEdit}
+                      className="flex-1 bg-transparent border-b border-primary outline-none text-foreground font-medium"
+                      autoFocus
+                    />
+                  ) : (
+                    <span className="text-foreground font-medium truncate">{folder.name}</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Delete functionality can be added back later if needed */}
+                  {editingFolderId === folder.id ? (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          saveFolderEdit();
+                        }}
+                        className="opacity-100 p-1 hover:bg-green-100 rounded transition-colors"
+                      >
+                        <Check className="w-4 h-4 text-green-600" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cancelFolderEdit();
+                        }}
+                        className="opacity-100 p-1 hover:bg-gray-100 rounded transition-colors"
+                      >
+                        <ChevronDown className="w-4 h-4 text-gray-600 rotate-90" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditingFolder(folder);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-100 rounded transition-colors"
+                      >
+                        <Edit className="w-4 h-4 text-blue-600" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmDeleteFolder(folder);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/10 rounded transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -293,13 +425,71 @@ export const Home = () => {
               >
                 <div className="flex items-center gap-3">
                   <FileText className="w-8 h-8 text-primary" />
-                  <h3 className="text-foreground font-medium">{journal.title}</h3>
+                  {editingJournalId === journal.id ? (
+                    <input
+                      type="text"
+                      value={editingJournalTitle}
+                      onChange={(e) => setEditingJournalTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveJournalEdit();
+                        if (e.key === 'Escape') cancelJournalEdit();
+                      }}
+                      onBlur={saveJournalEdit}
+                      className="flex-1 bg-transparent border-b border-primary outline-none text-foreground font-medium"
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <h3 className="text-foreground font-medium">{journal.title}</h3>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Trash functionality removed */}
-                  <div className="text-xs text-muted-foreground">
-                    {new Date(journal.updated_at).toLocaleDateString()}
-                  </div>
+                  {editingJournalId === journal.id ? (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          saveJournalEdit();
+                        }}
+                        className="opacity-100 p-1 hover:bg-green-100 rounded transition-colors"
+                      >
+                        <Check className="w-4 h-4 text-green-600" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cancelJournalEdit();
+                        }}
+                        className="opacity-100 p-1 hover:bg-gray-100 rounded transition-colors"
+                      >
+                        <ChevronDown className="w-4 h-4 text-gray-600 rotate-90" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditingJournal(journal);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-100 rounded transition-colors"
+                      >
+                        <Edit className="w-4 h-4 text-blue-600" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmDeleteJournal(journal);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/10 rounded transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </button>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(journal.updated_at).toLocaleDateString()}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -318,8 +508,8 @@ export const Home = () => {
             : "Confirm delete"
         }
         description={
-          confirmState.open && confirmState.kind === "journal"
-            ? "This will move it to Trash. It will be deleted permanently after 30 days."
+          confirmState.open
+            ? `Are you sure you want to delete this ${confirmState.kind}? This action cannot be undone.`
             : undefined
         }
         onConfirm={async () => {
@@ -327,7 +517,7 @@ export const Home = () => {
           const { kind, id } = confirmState;
           setConfirmState({ open: false });
           if (kind === "folder") return deleteFolder(id);
-          // Journal trash functionality removed
+          if (kind === "journal") return deleteJournal(id);
         }}
       />
     </div>
