@@ -11,7 +11,6 @@ import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
-import Trash from "./pages/Trash";
 
 const queryClient = new QueryClient();
 
@@ -21,15 +20,6 @@ const AppContent = () => {
       <Route path="/auth" element={<Auth />} />
       <Route path="/" element={<Index />} />
       <Route path="/dashboard" element={<Dashboard />} />
-      <Route
-        path="/trash"
-        element={
-          <div className="signed-in-theme flex h-screen overflow-hidden bg-background">
-            <Sidebar />
-            <Trash />
-          </div>
-        }
-      />
       <Route path="/journal/:id" element={
         <div className="signed-in-theme flex h-screen overflow-hidden bg-background">
           <Sidebar />

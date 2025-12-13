@@ -1,4 +1,4 @@
-import { Home, Search, Plus, HelpCircle, Trash2, Settings, Moon, Sun, LogOut } from "lucide-react";
+import { Home, Search, Plus, HelpCircle, Settings, Moon, Sun, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,7 +18,6 @@ type Journal = {
   title: string;
   folder_id: string | null;
   updated_at?: string | null;
-  trashed_at?: string | null;
 };
 
 type Folder = {
@@ -38,32 +37,10 @@ export const Sidebar = () => {
   const [editingTitle, setEditingTitle] = useState("");
   const [displayName, setDisplayName] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [confirmTrash, setConfirmTrash] = useState<null | { id: string; title: string }>(null);
 
-  const isMissingTrashedAtColumn = (err: unknown) => {
-    const e = err as { code?: string; message?: string } | null;
-    return e?.code === "42703" || (e?.message || "").toLowerCase().includes("trashed_at");
-  };
-
-  const purgeExpiredTrashedJournals = async () => {
-    if (!user) return;
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { error } = await supabase
-      .from("journals")
-      .delete()
-      .eq("user_id", user.id)
-      .not("trashed_at", "is", null)
-      .lt("trashed_at", cutoff);
-    // If the column doesn't exist yet in the user's DB, silently skip.
-    if (error && !isMissingTrashedAtColumn(error)) {
-      // Optional: don't toast here to avoid noise; journals will still load.
-      // console.warn(error);
-    }
-  };
 
   useEffect(() => {
     if (user) {
-      purgeExpiredTrashedJournals();
       loadJournals();
       loadFolders();
       loadDisplayName();
@@ -130,25 +107,9 @@ export const Sidebar = () => {
     const { data, error } = await supabase
       .from("journals")
       .select("*")
-      .is("trashed_at", null)
       .order("updated_at", { ascending: false });
 
     if (error) {
-      // Backward-compatible fallback: if trashed_at column isn't present yet, retry without filtering.
-      if (isMissingTrashedAtColumn(error)) {
-        const retry = await supabase.from("journals").select("*").order("updated_at", { ascending: false });
-        if (retry.error) {
-          toast({ title: "Error loading journals", description: retry.error.message, variant: "destructive" });
-        } else {
-          setJournals(retry.data || []);
-          // Temporarily disabled - applying migration to add trashed_at column
-          // toast({
-          //   title: "Trash not configured yet",
-          //   description: "Your database is missing the 'trashed_at' column. Journals are shown normally for now.",
-          // });
-        }
-        return;
-      }
       toast({ title: "Error loading journals", description: error.message, variant: "destructive" });
     } else {
       setJournals(data || []);
@@ -211,24 +172,6 @@ export const Sidebar = () => {
     }
   };
 
-  const moveJournalToTrash = async (journalId: string) => {
-    const { error } = await supabase.from("journals").update({ trashed_at: new Date().toISOString() }).eq("id", journalId);
-
-    if (error) {
-      if (isMissingTrashedAtColumn(error)) {
-        toast({
-          title: "Trash isn't set up in your database yet",
-          description: "Please apply the migration that adds journals.trashed_at, then try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-      toast({ title: "Error moving journal to trash", description: error.message, variant: "destructive" });
-    } else {
-      setJournals(journals.filter(j => j.id !== journalId));
-      toast({ title: "Moved to Trash" });
-    }
-  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -344,15 +287,6 @@ export const Sidebar = () => {
                   >
                     {journal.title}
                   </Button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmTrash({ id: journal.id, title: journal.title });
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded"
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </button>
                 </>
               )}
             </div>
@@ -368,16 +302,6 @@ export const Sidebar = () => {
         <Button variant="ghost" className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent">
           <HelpCircle className="w-4 h-4 mr-3" />
           Quick Guide
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => navigate("/trash")}
-          className={`w-full justify-start hover:bg-sidebar-accent ${
-            location.pathname === "/trash" ? "bg-primary/10 text-primary" : "text-sidebar-foreground"
-          }`}
-        >
-          <Trash2 className="w-4 h-4 mr-3" />
-          Trash
         </Button>
       </div>
 
@@ -446,24 +370,6 @@ export const Sidebar = () => {
         onOpenJournal={(journalId) => navigate(`/journal/${journalId}`)}
       />
 
-      <ConfirmDialog
-        open={!!confirmTrash}
-        onOpenChange={(open) => {
-          if (!open) setConfirmTrash(null);
-        }}
-        title={
-          confirmTrash
-            ? `Are you sure you want to delete the journal "${confirmTrash.title}"?`
-            : "Confirm delete"
-        }
-        description="This will move it to Trash. It will be deleted permanently after 30 days."
-        onConfirm={async () => {
-          if (!confirmTrash) return;
-          const { id } = confirmTrash;
-          setConfirmTrash(null);
-          await moveJournalToTrash(id);
-        }}
-      />
     </aside>
   );
 };

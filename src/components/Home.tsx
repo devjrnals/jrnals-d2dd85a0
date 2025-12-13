@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Folder, FileText, Trash2, ChevronDown } from "lucide-react";
+import { Folder, FileText, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,7 +12,6 @@ type Journal = {
   title: string;
   folder_id: string | null;
   updated_at: string;
-  trashed_at?: string | null;
 };
 
 type Folder = {
@@ -38,25 +37,6 @@ export const Home = () => {
       }
   >({ open: false });
 
-  const isMissingTrashedAtColumn = (err: unknown) => {
-    const e = err as { code?: string; message?: string } | null;
-    return e?.code === "42703" || (e?.message || "").toLowerCase().includes("trashed_at");
-  };
-
-  const purgeExpiredTrashedJournals = async () => {
-    if (!user) return;
-    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { error } = await supabase
-      .from("journals")
-      .delete()
-      .eq("user_id", user.id)
-      .not("trashed_at", "is", null)
-      .lt("trashed_at", cutoff);
-    if (error && !isMissingTrashedAtColumn(error)) {
-      // Don't toast here; loading will handle errors with better context.
-      // console.warn(error);
-    }
-  };
 
   useEffect(() => {
     if (user) {
@@ -80,21 +60,7 @@ export const Home = () => {
     ]);
 
     if (journalsRes.error) {
-      if (isMissingTrashedAtColumn(journalsRes.error)) {
-        const retry = await supabase.from("journals").select("*").order("updated_at", { ascending: false });
-        if (retry.error) {
-          toast({ title: "Error loading journals", description: retry.error.message, variant: "destructive" });
-        } else {
-          setJournals(retry.data || []);
-          // Temporarily disabled - applying migration to add trashed_at column
-          // toast({
-          //   title: "Trash not configured yet",
-          //   description: "Your database is missing the 'trashed_at' column. Journals are shown normally for now.",
-          // });
-        }
-      } else {
-        toast({ title: "Error loading journals", description: journalsRes.error.message, variant: "destructive" });
-      }
+      toast({ title: "Error loading journals", description: journalsRes.error.message, variant: "destructive" });
     } else {
       setJournals(journalsRes.data || []);
     }
@@ -179,34 +145,8 @@ export const Home = () => {
     }
   };
 
-  const moveJournalToTrash = async (journalId: string) => {
-    const { error } = await supabase
-      .from("journals")
-      .update({ trashed_at: new Date().toISOString() })
-      .eq("id", journalId);
-
-    if (error) {
-      if (isMissingTrashedAtColumn(error)) {
-        toast({
-          title: "Trash isn't set up in your database yet",
-          description: "Please apply the migration that adds journals.trashed_at, then try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-      toast({ title: "Error moving journal to trash", description: error.message, variant: "destructive" });
-    } else {
-      setJournals(journals.filter(j => j.id !== journalId));
-      toast({ title: "Moved to Trash" });
-    }
-  };
-
   const confirmDeleteFolder = (folder: Folder) => {
     setConfirmState({ open: true, kind: "folder", id: folder.id, title: folder.name });
-  };
-
-  const confirmTrashJournal = (journal: Journal) => {
-    setConfirmState({ open: true, kind: "journal", id: journal.id, title: journal.title });
   };
 
   return (
@@ -265,15 +205,7 @@ export const Home = () => {
                   <span className="text-foreground font-medium truncate">{folder.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      confirmDeleteFolder(folder);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded"
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </button>
+                  {/* Delete functionality can be added back later if needed */}
                 </div>
               </div>
             ))}
@@ -316,15 +248,7 @@ export const Home = () => {
                   <h3 className="text-foreground font-medium">{journal.title}</h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      confirmTrashJournal(journal);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded"
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </button>
+                  {/* Trash functionality removed */}
                   <div className="text-xs text-muted-foreground">
                     {new Date(journal.updated_at).toLocaleDateString()}
                   </div>
@@ -355,7 +279,7 @@ export const Home = () => {
           const { kind, id } = confirmState;
           setConfirmState({ open: false });
           if (kind === "folder") return deleteFolder(id);
-          return moveJournalToTrash(id);
+          // Journal trash functionality removed
         }}
       />
     </div>
