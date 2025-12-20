@@ -38,61 +38,12 @@ export type Database = {
         }
         Relationships: []
       }
-      journal_shares: {
-        Row: {
-          allowed_emails: string[] | null
-          created_at: string
-          created_by: string
-          id: string
-          journal_id: string
-          permission_type: string
-          share_type: string
-          updated_at: string
-        }
-        Insert: {
-          allowed_emails?: string[] | null
-          created_at?: string
-          created_by: string
-          id?: string
-          journal_id: string
-          permission_type: string
-          share_type: string
-          updated_at?: string
-        }
-        Update: {
-          allowed_emails?: string[] | null
-          created_at?: string
-          created_by?: string
-          id?: string
-          journal_id?: string
-          permission_type?: string
-          share_type?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "journal_shares_journal_id_fkey"
-            columns: ["journal_id"]
-            isOneToOne: false
-            referencedRelation: "journals"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "journal_shares_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       journals: {
         Row: {
           content: string | null
           created_at: string
           folder_id: string | null
           id: string
-          share_id: string | null
           title: string
           updated_at: string
           user_id: string
@@ -102,7 +53,6 @@ export type Database = {
           created_at?: string
           folder_id?: string | null
           id?: string
-          share_id?: string | null
           title?: string
           updated_at?: string
           user_id: string
@@ -112,7 +62,6 @@ export type Database = {
           created_at?: string
           folder_id?: string | null
           id?: string
-          share_id?: string | null
           title?: string
           updated_at?: string
           user_id?: string
