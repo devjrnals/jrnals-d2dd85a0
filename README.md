@@ -32,9 +32,29 @@ cd <YOUR_PROJECT_NAME>
 # Step 3: Install the necessary dependencies.
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Set up environment variables (see Environment Variables section below).
+
+# Step 5: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
+
+## Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# OpenAI API Configuration (required for chatbot functionality)
+VITE_OPENAI_API_KEY=your_openai_api_key_here
+
+# Supabase Configuration (if not already set)
+VITE_SUPABASE_URL=your_supabase_url_here
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+
+# Google Drive Integration (if needed)
+VITE_GOOGLE_CLIENT_ID=your_google_client_id_here
+```
+
+**Important**: Never commit your `.env` file to version control. It contains sensitive information like API keys.
 
 **Edit a file directly in GitHub**
 
