@@ -1,1 +1,13 @@
-project_id = "othhqhtciqzpzhmrtgyb"
+project_id = "xfbxmheoblotlhpveugv"
+
+[functions.google-auth-init]
+verify_jwt = true
+
+[functions.google-auth-callback]
+verify_jwt = false
+
+[functions.google-drive-search]
+verify_jwt = true
+
+[functions.chat]
+verify_jwt = false

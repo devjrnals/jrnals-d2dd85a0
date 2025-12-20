@@ -186,7 +186,6 @@ export const AddJournalsDialog = ({
               <Checkbox
                 id="select-all"
                 checked={allSelected}
-                indeterminate={someSelected}
                 onCheckedChange={handleSelectAll}
               />
               <label
@@ -227,7 +226,7 @@ export const AddJournalsDialog = ({
                     <Checkbox
                       id={journal.id}
                       checked={selectedJournals.has(journal.id)}
-                      readOnly
+                      onCheckedChange={() => handleSelectJournal(journal.id, !selectedJournals.has(journal.id))}
                     />
                     <FileText className="w-5 h-5 text-primary shrink-0" />
                     <div className="flex-1 min-w-0">

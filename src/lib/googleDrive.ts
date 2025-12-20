@@ -28,8 +28,9 @@ export const searchGoogleDrive = async (
       throw new Error('Not authenticated');
     }
 
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const response = await fetch(
-      `${supabase.supabaseUrl}/functions/v1/google-drive-search`,
+      `${supabaseUrl}/functions/v1/google-drive-search`,
       {
         method: 'POST',
         headers: {
@@ -63,7 +64,7 @@ export const isGoogleDriveConnected = async (): Promise<boolean> => {
     
     if (!user) return false;
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('google_drive_tokens')
       .select('id')
       .eq('user_id', user.id)
@@ -86,7 +87,7 @@ export const getGoogleDriveInfo = async (): Promise<{ email: string } | null> =>
     
     if (!user) return null;
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('google_drive_tokens')
       .select('google_email')
       .eq('user_id', user.id)

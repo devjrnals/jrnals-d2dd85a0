@@ -66,7 +66,7 @@ const SharedJournal = () => {
       }
 
       // Check if there are share permissions
-      const { data: shareData, error: shareError } = await supabase
+      const { data: shareData, error: shareError } = await (supabase as any)
         .from("journal_shares")
         .select("*")
         .eq("journal_id", shareId)
@@ -78,8 +78,8 @@ const SharedJournal = () => {
 
       if (shareData) {
         setPermissions({
-          share_type: shareData.share_type,
-          permission_type: shareData.permission_type,
+          share_type: shareData.share_type as 'anyone' | 'specific_users',
+          permission_type: shareData.permission_type as 'view' | 'edit',
           allowed_emails: shareData.allowed_emails || []
         });
 
@@ -87,7 +87,7 @@ const SharedJournal = () => {
         if (shareData.share_type === 'specific_users') {
           // Check if user has already verified their email for this session
           const verifiedEmail = sessionStorage.getItem(`shared_journal_${shareId}_email`);
-          if (verifiedEmail && shareData.allowed_emails.includes(verifiedEmail.toLowerCase())) {
+          if (verifiedEmail && shareData.allowed_emails?.includes(verifiedEmail.toLowerCase())) {
             setEmailVerified(true);
             setAccessGranted(true);
           } else {
