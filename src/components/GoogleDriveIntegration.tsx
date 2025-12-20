@@ -28,7 +28,7 @@ export const GoogleDriveIntegration = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('google_drive_tokens')
         .select('google_email')
         .eq('user_id', user.id)
@@ -67,8 +67,9 @@ export const GoogleDriveIntegration = () => {
         throw new Error('No access token available');
       }
 
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const response = await fetch(
-        `${supabase.supabaseUrl}/functions/v1/google-auth-init`,
+        `${supabaseUrl}/functions/v1/google-auth-init`,
         {
           method: 'POST',
           headers: {
@@ -105,7 +106,7 @@ export const GoogleDriveIntegration = () => {
           const { code, state } = event.data;
           
           const callbackResponse = await fetch(
-            `${supabase.supabaseUrl}/functions/v1/google-auth-callback`,
+            `${supabaseUrl}/functions/v1/google-auth-callback`,
             {
               method: 'POST',
               headers: {
@@ -151,7 +152,7 @@ export const GoogleDriveIntegration = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('google_drive_tokens')
         .delete()
         .eq('user_id', user.id);

@@ -136,10 +136,13 @@ serve(async (req) => {
       }));
 
       // Upsert cache records (ignore errors as this is optional)
-      await supabase
-        .from('google_drive_files_cache')
-        .upsert(cacheRecords, { onConflict: 'user_id,file_id' })
-        .catch(() => {});
+      try {
+        await supabase
+          .from('google_drive_files_cache')
+          .upsert(cacheRecords, { onConflict: 'user_id,file_id' });
+      } catch {
+        // Ignore cache errors
+      }
     }
 
     return new Response(
@@ -152,9 +155,10 @@ serve(async (req) => {
         status: 200,
       }
     );
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,

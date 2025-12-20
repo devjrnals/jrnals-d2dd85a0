@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 type ChatbotSidebarProps = {
   journalTitle?: string;
@@ -26,11 +27,14 @@ const id = () => {
   }
 };
 
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+
 export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps) {
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; content: string; type: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
       id: id(),
@@ -57,7 +61,6 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        // Check if it's a text file
         const textFileTypes = [
           'text/plain',
           'text/markdown',
@@ -81,7 +84,11 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
                           file.name.endsWith('.xml');
 
         if (!isTextFile) {
-          alert(`File "${file.name}" is not a supported text file type. Please upload text files only.`);
+          toast({
+            title: "Unsupported file type",
+            description: `File "${file.name}" is not a supported text file type.`,
+            variant: "destructive"
+          });
           continue;
         }
 
@@ -93,17 +100,109 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
         });
       } catch (error) {
         console.error(`Error reading file ${file.name}:`, error);
-        alert(`Error reading file "${file.name}". Please try again.`);
+        toast({
+          title: "Error reading file",
+          description: `Error reading file "${file.name}". Please try again.`,
+          variant: "destructive"
+        });
       }
     }
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
-    // Clear the input
     event.target.value = '';
   };
 
   const removeFile = (index: number) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const streamChat = async ({
+    messages: chatMessages,
+    journalTitle: title,
+    onDelta,
+    onDone,
+    onError,
+  }: {
+    messages: Array<{ role: string; content: string }>;
+    journalTitle: string;
+    onDelta: (deltaText: string) => void;
+    onDone: () => void;
+    onError: (error: string) => void;
+  }) => {
+    const resp = await fetch(CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ messages: chatMessages, journalTitle: title }),
+    });
+
+    if (resp.status === 429) {
+      onError("Rate limit exceeded. Please try again later.");
+      return;
+    }
+
+    if (!resp.ok || !resp.body) {
+      const errorData = await resp.json().catch(() => ({}));
+      onError(errorData.error || "Failed to start stream");
+      return;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let textBuffer = "";
+    let streamDone = false;
+
+    while (!streamDone) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      textBuffer += decoder.decode(value, { stream: true });
+
+      let newlineIndex: number;
+      while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+        let line = textBuffer.slice(0, newlineIndex);
+        textBuffer = textBuffer.slice(newlineIndex + 1);
+
+        if (line.endsWith("\r")) line = line.slice(0, -1);
+        if (line.startsWith(":") || line.trim() === "") continue;
+        if (!line.startsWith("data: ")) continue;
+
+        const jsonStr = line.slice(6).trim();
+        if (jsonStr === "[DONE]") {
+          streamDone = true;
+          break;
+        }
+
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+          if (content) onDelta(content);
+        } catch {
+          textBuffer = line + "\n" + textBuffer;
+          break;
+        }
+      }
+    }
+
+    // Final flush
+    if (textBuffer.trim()) {
+      for (let raw of textBuffer.split("\n")) {
+        if (!raw) continue;
+        if (raw.endsWith("\r")) raw = raw.slice(0, -1);
+        if (raw.startsWith(":") || raw.trim() === "") continue;
+        if (!raw.startsWith("data: ")) continue;
+        const jsonStr = raw.slice(6).trim();
+        if (jsonStr === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+          if (content) onDelta(content);
+        } catch { /* ignore partial leftovers */ }
+      }
+    }
+
+    onDone();
   };
 
   const send = async (text: string) => {
@@ -126,56 +225,62 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
     setUploadedFiles([]);
     setIsLoading(true);
 
-    try {
-      // Call OpenAI API
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a helpful AI assistant for a journal/note-taking application. The user is currently working on a journal titled "${journalTitle || 'Untitled'}". Provide helpful, relevant responses to their questions about journaling, writing, organization, or any other topics they bring up. When files are provided, analyze their contents and use that information to provide more relevant and informed responses. Be concise but informative.`
-            },
-            ...messages.map(m => {
-              let content = m.content;
-              if (m.files && m.files.length > 0) {
-                content += '\n\n--- Attached Files ---\n';
-                m.files.forEach(file => {
-                  content += `\n## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\`\n`;
-                });
-              }
-              return { role: m.role, content };
-            }),
-            {
-              role: 'user',
-              content: currentFiles.length > 0
-                ? `${currentText}\n\n--- Attached Files ---\n${currentFiles.map(file => `## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\``).join('\n')}`
-                : currentText
-            }
-          ],
-          max_tokens: 1500, // Increased to accommodate file contents
-          temperature: 0.7,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        const aiResponse = data.choices[0].message.content;
-        setMessages((prev) => [
-          ...prev,
-          { id: id(), role: "assistant", content: aiResponse },
-        ]);
-      } else {
-        throw new Error(data.error?.message || 'API call failed');
+    // Prepare messages for API
+    const apiMessages = messages.map(m => {
+      let content = m.content;
+      if (m.files && m.files.length > 0) {
+        content += '\n\n--- Attached Files ---\n';
+        m.files.forEach(file => {
+          content += `\n## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\`\n`;
+        });
       }
+      return { role: m.role, content };
+    });
+
+    // Add current user message
+    const userContent = currentFiles.length > 0
+      ? `${currentText}\n\n--- Attached Files ---\n${currentFiles.map(file => `## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\``).join('\n')}`
+      : currentText;
+    
+    apiMessages.push({ role: 'user', content: userContent });
+
+    let assistantContent = "";
+    const upsertAssistant = (nextChunk: string) => {
+      assistantContent += nextChunk;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant") {
+          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantContent } : m));
+        }
+        return [...prev, { id: id(), role: "assistant", content: assistantContent }];
+      });
+    };
+
+    try {
+      await streamChat({
+        messages: apiMessages,
+        journalTitle: journalTitle || 'Untitled',
+        onDelta: (chunk) => upsertAssistant(chunk),
+        onDone: () => setIsLoading(false),
+        onError: (error) => {
+          toast({
+            title: "Error",
+            description: error,
+            variant: "destructive"
+          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: id(),
+              role: "assistant",
+              content: "Sorry, I'm having trouble connecting right now. Please try again later.",
+            },
+          ]);
+          setIsLoading(false);
+        }
+      });
     } catch (error) {
-      console.error('Error calling OpenAI API:', error);
+      console.error('Error calling chat API:', error);
       setMessages((prev) => [
         ...prev,
         {
@@ -184,7 +289,6 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
           content: "Sorry, I'm having trouble connecting right now. Please try again later.",
         },
       ]);
-    } finally {
       setIsLoading(false);
     }
   };
