@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileText, Sparkles, Brain, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import logoLight from "@/assets/logo-light.png";
-import logoDark from "@/assets/logo-dark.png";
+import landingLogo from "@/assets/landing-logo.png";
 
 export const Landing = () => {
   const navigate = useNavigate();
@@ -41,7 +40,28 @@ export const Landing = () => {
         ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white text-gray-900" style={{
+      '--background': '0 0% 100%',
+      '--foreground': '222.2 84% 4.9%',
+      '--card': '0 0% 100%',
+      '--card-foreground': '222.2 84% 4.9%',
+      '--popover': '0 0% 100%',
+      '--popover-foreground': '222.2 84% 4.9%',
+      '--primary': '221.2 83.2% 53.3%',
+      '--primary-foreground': '210 40% 98%',
+      '--secondary': '210 40% 96%',
+      '--secondary-foreground': '222.2 84% 4.9%',
+      '--muted': '210 40% 96%',
+      '--muted-foreground': '215.4 16.3% 46.9%',
+      '--accent': '210 40% 96%',
+      '--accent-foreground': '222.2 84% 4.9%',
+      '--destructive': '0 84.2% 60.2%',
+      '--destructive-foreground': '210 40% 98%',
+      '--border': '214.3 31.8% 91.4%',
+      '--input': '214.3 31.8% 91.4%',
+      '--ring': '221.2 83.2% 53.3%',
+      '--radius': '0.5rem',
+    } as React.CSSProperties}>
       {/* Header */}
       <header
         className={cn(
@@ -56,15 +76,9 @@ export const Landing = () => {
           <div className="flex items-center gap-8">
             <div className="flex items-center">
               <img
-                src={logoDark}
+                src={landingLogo}
                 alt="TaskLearn"
-                className="h-7 w-auto dark:hidden"
-                loading="eager"
-              />
-              <img
-                src={logoLight}
-                alt="TaskLearn"
-                className="hidden h-7 w-auto dark:block"
+                className="h-7 w-auto"
                 loading="eager"
               />
             </div>
@@ -95,7 +109,7 @@ export const Landing = () => {
         </Badge>
         
         <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-6 max-w-3xl mx-auto">
-          An AI tutor made for you
+          Academic Agent That Executes Your Coursework
         </h1>
         
         <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">

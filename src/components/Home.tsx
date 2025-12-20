@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Folder, FileText, Check, Edit, Trash2 } from "lucide-react";
+import { Folder, FileText, Check, Edit, Trash2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,6 +23,7 @@ type Journal = {
 type Folder = {
   id: string;
   name: string;
+  journal_count?: number;
 };
 
 export const Home = () => {
@@ -53,7 +54,7 @@ export const Home = () => {
     if (user) {
       loadData();
     }
-  }, [user, sortBy]);
+  }, [user, sortBy, activeFilter]);
 
   const loadData = async () => {
     if (!user) return;
@@ -75,22 +76,105 @@ export const Home = () => {
 
     const sortConfig = getSortConfig();
 
-    const [journalsRes, foldersRes] = await Promise.all([
-      supabase
-        .from("journals")
-        .select("*")
-        .eq("user_id", user.id)
-        .order(sortConfig.column, { ascending: sortConfig.ascending }),
-      supabase.from("folders").select("*").eq("user_id", user.id).order("created_at", { ascending: false })
-    ]);
+    let journalsRes;
+    let foldersRes;
 
-    if (journalsRes.error) {
+    if (activeFilter === "shared") {
+      // Load shared journals
+      const userEmail = user.email?.toLowerCase();
+
+      if (!userEmail) {
+        toast({
+          title: "Email required",
+          description: "Your email address is required to view shared journals.",
+          variant: "destructive"
+        });
+        // Load empty results for shared view
+        journalsRes = { data: [], error: null };
+        foldersRes = { data: [], error: null };
+      } else {
+        // Get journals that are shared with this user
+        const { data: sharedData, error: sharedError } = await supabase
+          .from("journal_shares")
+          .select(`
+            journal_id,
+            share_type,
+            permission_type,
+            allowed_emails,
+            journals (
+              id,
+              title,
+              content,
+              folder_id,
+              updated_at,
+              user_id
+            )
+          `)
+          .or(`share_type.eq.anyone,allowed_emails.cs.{${userEmail}}`);
+
+        if (sharedError) {
+          console.error("Error loading shared journals:", sharedError);
+          journalsRes = { data: [], error: sharedError };
+        } else {
+          // Extract journals from the share data
+          const sharedJournals = (sharedData || [])
+            .map(share => share.journals)
+            .filter(Boolean)
+            .sort((a, b) => {
+              const aVal = new Date(a[sortConfig.column]).getTime();
+              const bVal = new Date(b[sortConfig.column]).getTime();
+              return sortConfig.ascending ? aVal - bVal : bVal - aVal;
+            });
+
+          journalsRes = { data: sharedJournals, error: null };
+        }
+
+        // No folders shown in shared view
+        foldersRes = { data: [], error: null };
+      }
+    } else {
+      // Load owned journals and folders
+      [journalsRes, foldersRes] = await Promise.all([
+        supabase
+          .from("journals")
+          .select("*")
+          .eq("user_id", user.id)
+          .order(sortConfig.column, { ascending: sortConfig.ascending }),
+        supabase.from("folders").select("*").eq("user_id", user.id).order("created_at", { ascending: false })
+      ]);
+
+      // Get journal counts for folders
+      if (foldersRes.data) {
+        const folderIds = foldersRes.data.map(f => f.id);
+        if (folderIds.length > 0) {
+          const { data: counts } = await supabase
+            .from("journals")
+            .select("folder_id")
+            .eq("user_id", user.id)
+            .in("folder_id", folderIds);
+
+          const countMap = (counts || []).reduce((acc, journal) => {
+            if (journal.folder_id) {
+              acc[journal.folder_id] = (acc[journal.folder_id] || 0) + 1;
+            }
+            return acc;
+          }, {} as Record<string, number>);
+
+          foldersRes.data = foldersRes.data.map(folder => ({
+            ...folder,
+            journal_count: countMap[folder.id] || 0
+          }));
+        }
+      }
+    }
+
+    if (journalsRes.error && activeFilter !== "shared") {
       toast({ title: "Error loading journals", description: journalsRes.error.message, variant: "destructive" });
     } else {
       setJournals(journalsRes.data || []);
     }
 
-    if (foldersRes.error) {
+    if (foldersRes.error && activeFilter !== "shared") {
       toast({ title: "Error loading folders", variant: "destructive" });
     } else {
       setFolders(foldersRes.data || []);
@@ -284,95 +368,100 @@ export const Home = () => {
           ))}
         </div>
 
-        {/* Folders Section */}
-        <div className="mb-12">
-          <div className="flex items-center gap-3 mb-6">
-            <h2 className="text-2xl font-bold text-foreground">Folders</h2>
-            <span className="text-lg text-muted-foreground">{folders.length}</span>
-          </div>
+        {/* Folders Section - Only show for owned journals */}
+        {activeFilter === "owned" && (
+          <div className="mb-12">
+            <div className="flex items-center gap-3 mb-6">
+              <h2 className="text-2xl font-bold text-foreground">Folders</h2>
+              <span className="text-lg text-muted-foreground">{folders.length}</span>
+            </div>
 
-          <div className="grid grid-cols-4 gap-4">
-            <button
-              onClick={handleCreateFolder}
-              className="group border-2 border-dashed border-border rounded-lg p-4 hover:border-primary transition-colors flex items-center gap-3 bg-card/50"
-            >
-              <Folder className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
-              <span className="text-foreground font-medium">Create folder</span>
-            </button>
-            {folders.map((folder) => (
-              <div
-                key={folder.id}
-                className="group border border-border rounded-lg p-4 hover:border-primary transition-colors flex items-center justify-between bg-card cursor-pointer relative"
+            <div className="grid grid-cols-4 gap-4">
+              <button
+                onClick={handleCreateFolder}
+                className="group border-2 border-dashed border-border rounded-lg p-4 hover:border-primary transition-colors flex items-center gap-3 bg-card/50"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Folder className="w-8 h-8 text-primary shrink-0" />
-                  {editingFolderId === folder.id ? (
-                    <input
-                      type="text"
-                      value={editingFolderName}
-                      onChange={(e) => setEditingFolderName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveFolderEdit();
-                      }}
-                      onBlur={() => {
-                        if (editingFolderName.trim()) {
+                <Folder className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span className="text-foreground font-medium">Create folder</span>
+              </button>
+              {folders.map((folder) => (
+                <div
+                  key={folder.id}
+                  onClick={() => navigate(`/folder/${folder.id}`)}
+                  className="group border border-border rounded-lg p-4 hover:border-primary transition-colors flex items-center justify-between bg-card cursor-pointer relative"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Folder className="w-8 h-8 text-primary shrink-0" />
+                    {editingFolderId === folder.id ? (
+                      <input
+                        type="text"
+                        value={editingFolderName}
+                        onChange={(e) => setEditingFolderName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveFolderEdit();
+                        }}
+                        onBlur={() => {
+                          if (editingFolderName.trim()) {
+                            saveFolderEdit();
+                          } else {
+                            setEditingFolderId(null);
+                            setEditingFolderName("");
+                          }
+                        }}
+                        className="flex-1 bg-transparent border-b border-primary outline-none text-foreground font-medium"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="text-foreground font-medium truncate">{folder.name}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {editingFolderId === folder.id ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           saveFolderEdit();
-                        } else {
-                          setEditingFolderId(null);
-                          setEditingFolderName("");
-                        }
-                      }}
-                      className="flex-1 bg-transparent border-b border-primary outline-none text-foreground font-medium"
-                      autoFocus
-                    />
-                  ) : (
-                    <span className="text-foreground font-medium truncate">{folder.name}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {editingFolderId === folder.id ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        saveFolderEdit();
-                      }}
-                      className="opacity-100 p-1 hover:bg-green-100 rounded transition-colors"
-                    >
-                      <Check className="w-4 h-4 text-green-600" />
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startEditingFolder(folder);
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-100 rounded transition-colors"
+                        className="opacity-100 p-1 hover:bg-green-100 rounded transition-colors"
                       >
-                        <Edit className="w-4 h-4 text-blue-600" />
+                        <Check className="w-4 h-4 text-green-600" />
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          confirmDeleteFolder(folder);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/10 rounded transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </button>
-                    </>
-                  )}
+                    ) : (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditingFolder(folder);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-blue-100 rounded transition-colors"
+                        >
+                          <Edit className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            confirmDeleteFolder(folder);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/10 rounded transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Journals Section */}
         <div>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold text-foreground">Journals</h2>
+              <h2 className="text-2xl font-bold text-foreground">
+                {activeFilter === "shared" ? "Shared with you" : "Journals"}
+              </h2>
               <span className="text-lg text-muted-foreground">{journals.length}</span>
             </div>
 
@@ -411,13 +500,15 @@ export const Home = () => {
           </div>
 
           <div className="space-y-2">
-            <button
-              onClick={handleCreateJournal}
-              className="group border-2 border-dashed border-border rounded-lg p-4 hover:border-primary transition-colors flex items-center gap-3 w-full bg-card/50"
-            >
-              <FileText className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
-              <span className="text-foreground font-medium">Create journal</span>
-            </button>
+            {activeFilter === "owned" && (
+              <button
+                onClick={handleCreateJournal}
+                className="group border-2 border-dashed border-border rounded-lg p-4 hover:border-primary transition-colors flex items-center gap-3 w-full bg-card/50"
+              >
+                <FileText className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span className="text-foreground font-medium">Create journal</span>
+              </button>
+            )}
             {journals.map((journal) => (
               <div
                 key={journal.id}
@@ -489,6 +580,15 @@ export const Home = () => {
                 </div>
               </div>
             ))}
+            {journals.length === 0 && activeFilter === "shared" && (
+              <div className="text-center py-12">
+                <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-foreground mb-2">No shared journals</h3>
+                <p className="text-muted-foreground">
+                  Journals shared with you will appear here.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

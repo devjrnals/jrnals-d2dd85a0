@@ -176,18 +176,19 @@ export const Editor = ({ journalId, initialContent = "", onWordCountChange }: Ed
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-editor">
-      <div className="px-12 py-6">
+    <div className="flex-1 min-h-0 flex flex-col bg-editor">
+      {/* No bottom padding so the textarea can reach viewport bottom */}
+      <div className="flex-1 min-h-0 px-12 pt-6 pb-0 flex flex-col">
 
-        <div className="relative">
+        <div className="relative flex-1 min-h-0">
           <textarea
             ref={textareaRef}
             value={content}
             onChange={handleContentChange}
             placeholder="Start writing or type '/' to see commands..."
-            className="w-full min-h-[400px] bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-base leading-relaxed"
+            className="w-full flex-1 min-h-0 bg-transparent text-foreground placeholder:text-muted-foreground resize-none focus:outline-none text-base leading-relaxed"
           />
-          
+
           {showCommandMenu && (
             <CommandMenu
               position={commandMenuPosition}

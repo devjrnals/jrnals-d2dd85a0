@@ -6,6 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { z } from "zod";
+
+const loginSchema = z.object({
+  email: z.string().trim().email({ message: "Invalid email address" }).max(255),
+  password: z.string().min(6, { message: "Password must be at least 6 characters" }).max(128),
+});
+
+const signupSchema = loginSchema.extend({
+  displayName: z.string().trim().min(1, { message: "Display name is required" }).max(100),
+});
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -13,11 +23,9 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string }>({});
   const navigate = useNavigate();
   const { toast } = useToast();
-
-  // Debug: Check if Supabase is connected
-  console.log('Auth component loaded, Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -37,13 +45,30 @@ export default function Auth() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
     setLoading(true);
 
     try {
+      // Validate input
+      const schema = isLogin ? loginSchema : signupSchema;
+      const data = isLogin ? { email, password } : { email, password, displayName };
+      const result = schema.safeParse(data);
+
+      if (!result.success) {
+        const fieldErrors: typeof errors = {};
+        result.error.errors.forEach((err) => {
+          const field = err.path[0] as keyof typeof errors;
+          fieldErrors[field] = err.message;
+        });
+        setErrors(fieldErrors);
+        setLoading(false);
+        return;
+      }
+
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+          email: result.data.email,
+          password: result.data.password,
         });
 
         if (error) throw error;
@@ -53,12 +78,13 @@ export default function Auth() {
           description: "You've successfully logged in.",
         });
       } else {
+        const validatedData = result.data as z.infer<typeof signupSchema>;
         const { error } = await supabase.auth.signUp({
-          email,
-          password,
+          email: validatedData.email,
+          password: validatedData.password,
           options: {
             data: {
-              display_name: displayName,
+              display_name: validatedData.displayName,
             },
             emailRedirectTo: `${window.location.origin}/`,
           },
@@ -126,7 +152,11 @@ export default function Auth() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 required={!isLogin}
+                maxLength={100}
               />
+              {errors.displayName && (
+                <p className="text-sm text-destructive">{errors.displayName}</p>
+              )}
             </div>
           )}
 
@@ -139,7 +169,11 @@ export default function Auth() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              maxLength={255}
             />
+            {errors.email && (
+              <p className="text-sm text-destructive">{errors.email}</p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -152,7 +186,11 @@ export default function Auth() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
+              maxLength={128}
             />
+            {errors.password && (
+              <p className="text-sm text-destructive">{errors.password}</p>
+            )}
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>

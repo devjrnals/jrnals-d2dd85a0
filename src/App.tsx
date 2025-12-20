@@ -7,6 +7,8 @@ import { Sidebar } from "@/components/Sidebar";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Journal from "./pages/Journal";
+import Folder from "./pages/Folder";
+import SharedJournal from "./pages/SharedJournal";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
@@ -26,6 +28,13 @@ const AppContent = () => {
           <Journal />
         </div>
       } />
+      <Route path="/folder/:folderId" element={
+        <div className="signed-in-theme flex h-screen overflow-hidden bg-background">
+          <Sidebar />
+          <Folder />
+        </div>
+      } />
+      <Route path="/shared/:shareId" element={<SharedJournal />} />
       <Route path="/profile" element={
         <div className="signed-in-theme flex h-screen overflow-hidden bg-background">
           <Sidebar />

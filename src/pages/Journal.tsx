@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { TopBar } from "@/components/TopBar";
 import { Editor } from "@/components/Editor";
+import { ChatbotSidebar } from "@/components/ChatbotSidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +18,7 @@ const Journal = () => {
   const [loadingJournal, setLoadingJournal] = useState(true);
   const [wordCount, setWordCount] = useState(0);
   const [confirmTrashOpen, setConfirmTrashOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const isMissingTrashedAtColumn = (err: unknown) => {
     const e = err as { code?: string; message?: string } | null;
@@ -48,7 +50,8 @@ const Journal = () => {
       toast({ title: "Error loading journal", variant: "destructive" });
       navigate("/");
     } else {
-      if (data?.trashed_at) {
+      // Check for trashed_at if the column exists (optional feature)
+      if ((data as any)?.trashed_at) {
         toast({ title: "That journal is in Trash." });
         setLoadingJournal(false);
         navigate("/trash");
@@ -78,7 +81,7 @@ const Journal = () => {
     if (!id) return;
     const { error } = await supabase
       .from("journals")
-      .update({ trashed_at: new Date().toISOString() })
+      .update({ trashed_at: new Date().toISOString() } as any)
       .eq("id", id);
 
     if (error) {
@@ -113,15 +116,30 @@ const Journal = () => {
     <div className="flex-1 flex flex-col overflow-hidden">
       <TopBar
         journalTitle={journal.title}
+        journalId={journal.id}
         onTitleChange={handleTitleChange}
         wordCount={wordCount}
         onMoveToTrash={() => setConfirmTrashOpen(true)}
+        onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+        sidebarCollapsed={sidebarCollapsed}
       />
-      <Editor 
-        journalId={journal.id} 
-        initialContent={journal.content || ""} 
-        onWordCountChange={setWordCount}
-      />
+      {/* Content area under the TopBar */}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+          <Editor
+            journalId={journal.id}
+            initialContent={journal.content || ""}
+            onWordCountChange={setWordCount}
+          />
+        </div>
+
+        {/* Right-side chatbot panel (desktop) */}
+        {!sidebarCollapsed && (
+          <div className="hidden lg:flex w-[360px] border-l border-border bg-card">
+            <ChatbotSidebar journalTitle={journal.title} />
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         open={confirmTrashOpen}
