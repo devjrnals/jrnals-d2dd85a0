@@ -21,21 +21,6 @@ serve(async (req) => {
       throw new Error('Missing Google OAuth configuration');
     }
 
-    // Define the scopes we need
-    const scopes = [
-      'https://www.googleapis.com/auth/drive.readonly',
-      'https://www.googleapis.com/auth/userinfo.email',
-    ].join(' ');
-
-    // Generate the OAuth URL
-    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
-    authUrl.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', scopes);
-    authUrl.searchParams.set('access_type', 'offline');
-    authUrl.searchParams.set('prompt', 'consent');
-
     // Get user ID from request (passed from frontend)
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -55,8 +40,42 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    // Add state parameter with user ID for security
-    authUrl.searchParams.set('state', user.id);
+    // SECURITY: Generate a cryptographically random state token instead of using user ID
+    // This prevents attackers from forging state parameters
+    const stateToken = crypto.randomUUID();
+
+    // Store the state token in database with user_id and expiry
+    const { error: stateError } = await supabase
+      .from('oauth_states')
+      .insert({
+        state_token: stateToken,
+        user_id: user.id,
+        provider: 'google',
+        // expires_at is set by database default (10 minutes)
+      });
+
+    if (stateError) {
+      console.error('Failed to store OAuth state:', stateError);
+      throw new Error('Failed to initialize OAuth flow');
+    }
+
+    // Define the scopes we need
+    const scopes = [
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/userinfo.email',
+    ].join(' ');
+
+    // Generate the OAuth URL
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', scopes);
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'consent');
+    
+    // SECURITY: Use the random state token, not user ID
+    authUrl.searchParams.set('state', stateToken);
 
     return new Response(
       JSON.stringify({ authUrl: authUrl.toString() }),
@@ -76,4 +95,3 @@ serve(async (req) => {
     );
   }
 });
-
