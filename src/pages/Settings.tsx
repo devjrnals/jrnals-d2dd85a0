@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { openPremiumPanel } from "@/lib/premiumPanel";
 import { Loader2, Camera, Crown, CreditCard, Plus } from "lucide-react";
 
 export default function Settings() {
@@ -432,7 +433,10 @@ export default function Settings() {
               </div>
 
               {!isPlusPlan() && (
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  onClick={openPremiumPanel}
+                >
                   <Crown className="w-4 h-4 mr-2" />
                   Upgrade to Plus
                 </Button>
@@ -460,10 +464,12 @@ export default function Settings() {
               <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
-                      <path fill="#000000" d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.846-.813c1.364-.076 1.864-.377 2.965-.941V2.986a52.138 52.138 0 0 0-3.77.245c-3.912.562-3.819 1.46-1.51 1.661 1.077.098 2.909-.045 3.746-.466-.197.513-.37.631-.756.735-2.035.517-3.708.43-5.727.26-2.486-.206-3.25-.297-5.727-.26-2.024.037-3.708.154-5.727-.26-.387-.104-.56-.222-.756-.735.838.421 2.67.564 3.746.466 2.309-.201 2.402-1.099-1.51-1.661a52.11 52.11 0 0 0-3.77-.245v.227c1.1.564 1.6.865 2.965.941L4.64 4.678c1.402.094 1.682.14 2.428-.466z"/>
-                      <path fill="#000000" d="M6.666 6.762c.782-.146.902-.369.902-.369.053-1.09-.755-1.09-.755-1.09-.708-.197-1.027-.448-1.027-.448-.527-.271-.805-.365-.805-.365-.729-.226-1.443-.252-1.443-.252-.709-.12-1.26-.231-1.26-.231-.708-.197-1.027-.448-1.027-.448-.527-.271-.805-.365-.805-.365-.729-.226-1.443-.252-1.443-.252-.709-.12-1.26-.231-1.26-.231-.708-.197-1.027-.448-1.027-.448-.527-.271-.805-.365-.805-.365-.729-.226-1.443-.252-1.443-.252-.709-.12-1.26-.231-1.26-.231-.708-.197-1.027-.448-1.027-.448-.527-.271-.805-.365-.805-.365-.729-.226-1.443-.252-1.443-.252-.709-.12-1.26-.231-1.26-.231v7.29c.729 0 1.443.252 1.443.252.527.271.805.365.805.365.527.271 1.027.448 1.027.448.709.12 1.26.231 1.26.231.729.226 1.443.252 1.443.252.527.271.805.365.805.365.527.271 1.027.448 1.027.448.709.12 1.26.231 1.26.231.729.226 1.443.252 1.443.252.527.271.805.365.805.365.527.271 1.027.448 1.027.448.709.12 1.26.231 1.26.231.729.226 1.443.252 1.443.252.527.271.805.365.805.365.527.271 1.027.448 1.027.448.709.12 1.26.231 1.26.231z"/>
-                    </svg>
+                    <img
+                      src="/integrations/notion.png"
+                      alt="Notion"
+                      className="w-full h-full object-contain p-1"
+                      loading="lazy"
+                    />
                   </div>
                   <div>
                     <p className="font-medium text-foreground">Notion</p>
@@ -480,9 +486,12 @@ export default function Settings() {
               <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>
-                    </svg>
+                    <img
+                      src="/integrations/google-drive.png"
+                      alt="Google Drive"
+                      className="w-full h-full object-contain p-1"
+                      loading="lazy"
+                    />
                   </div>
                   <div>
                     <p className="font-medium text-foreground">Google Drive</p>
@@ -499,12 +508,12 @@ export default function Settings() {
               <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                    <svg className="w-6 h-6" viewBox="0 0 24 24">
-                      <rect x="2" y="2" width="20" height="20" rx="2" fill="#E84B37"/>
-                      <rect x="4" y="4" width="16" height="16" rx="1" fill="white"/>
-                      <rect x="6" y="6" width="12" height="12" rx="1" fill="#E84B37"/>
-                      <rect x="8" y="8" width="8" height="8" rx="1" fill="white"/>
-                    </svg>
+                    <img
+                      src="/integrations/canvas.png"
+                      alt="Canvas"
+                      className="w-full h-full object-contain p-1"
+                      loading="lazy"
+                    />
                   </div>
                   <div>
                     <p className="font-medium text-foreground">Canvas</p>

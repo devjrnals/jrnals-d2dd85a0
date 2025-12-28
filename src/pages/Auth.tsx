@@ -92,6 +92,14 @@ export default function Auth() {
 
         if (error) throw error;
 
+        // Track account signup
+        try {
+          await supabase.rpc('increment_accounts_count');
+        } catch (error) {
+          // Silently handle if function/table doesn't exist yet
+          console.log('Account tracking not available yet:', error.message);
+        }
+
         toast({
           title: "Account created!",
           description: "You've successfully signed up.",
@@ -128,7 +136,32 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
+    // Auth should always render in light mode, regardless of the last-used app theme.
+    <div
+      className="flex min-h-screen items-center justify-center bg-white text-gray-900"
+      style={{
+        "--background": "0 0% 100%",
+        "--foreground": "222.2 84% 4.9%",
+        "--card": "0 0% 100%",
+        "--card-foreground": "222.2 84% 4.9%",
+        "--popover": "0 0% 100%",
+        "--popover-foreground": "222.2 84% 4.9%",
+        "--primary": "221.2 83.2% 53.3%",
+        "--primary-foreground": "210 40% 98%",
+        "--secondary": "210 40% 96%",
+        "--secondary-foreground": "222.2 84% 4.9%",
+        "--muted": "210 40% 96%",
+        "--muted-foreground": "215.4 16.3% 46.9%",
+        "--accent": "210 40% 96%",
+        "--accent-foreground": "222.2 84% 4.9%",
+        "--destructive": "0 84.2% 60.2%",
+        "--destructive-foreground": "210 40% 98%",
+        "--border": "214.3 31.8% 91.4%",
+        "--input": "214.3 31.8% 91.4%",
+        "--ring": "221.2 83.2% 53.3%",
+        "--radius": "0.5rem",
+      } as React.CSSProperties}
+    >
       <div className="w-full max-w-md p-8 space-y-6 bg-card rounded-lg border border-border">
         <div className="space-y-2 text-center">
           <h1 className="text-3xl font-bold">

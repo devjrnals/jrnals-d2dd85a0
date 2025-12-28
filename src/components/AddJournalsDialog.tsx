@@ -115,10 +115,12 @@ export const AddJournalsDialog = ({
     setAdding(true);
     try {
       const journalIds = Array.from(selectedJournals);
+      // Only update journals that are not already in this folder
       const { error } = await supabase
         .from("journals")
         .update({ folder_id: folderId })
-        .in("id", journalIds);
+        .in("id", journalIds)
+        .or(`folder_id.is.null,folder_id.neq.${folderId}`);
 
       if (error) {
         toast({
@@ -127,6 +129,7 @@ export const AddJournalsDialog = ({
           variant: "destructive"
         });
       } else {
+        // Get the actual journals that were updated (filtering out any that were already in folder)
         const addedJournals = availableJournals.filter(j =>
           selectedJournals.has(j.id)
         ).map(j => ({ ...j, folder_id: folderId }));
@@ -268,6 +271,7 @@ export const AddJournalsDialog = ({
     </Dialog>
   );
 };
+
 
 
 

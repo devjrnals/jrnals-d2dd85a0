@@ -9,6 +9,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
+type QuizQuestion = {
+  question: string;
+  options: string[];
+  correctAnswer: number;
+};
+
+type QuizData = {
+  title: string;
+  questions: QuizQuestion[];
+};
+
+type FlashcardData = {
+  title: string;
+  cards: Array<{
+    id: string;
+    front: string;
+    back: string;
+  }>;
+};
+
 const Journal = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -19,6 +39,10 @@ const Journal = () => {
   const [wordCount, setWordCount] = useState(0);
   const [confirmTrashOpen, setConfirmTrashOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Quiz state
+  const [currentQuiz, setCurrentQuiz] = useState<QuizData | null>(null);
+  const [currentFlashcards, setCurrentFlashcards] = useState<FlashcardData | null>(null);
 
   const isMissingTrashedAtColumn = (err: unknown) => {
     const e = err as { code?: string; message?: string } | null;
@@ -65,15 +89,17 @@ const Journal = () => {
   const handleTitleChange = async (newTitle: string) => {
     if (!id) return;
 
+    const finalTitle = newTitle.trim() || "New Journal";
+
     const { error } = await supabase
       .from("journals")
-      .update({ title: newTitle })
+      .update({ title: finalTitle })
       .eq("id", id);
 
     if (error) {
       toast({ title: "Error updating title", variant: "destructive" });
     } else {
-      setJournal({ ...journal, title: newTitle });
+      setJournal({ ...journal, title: finalTitle });
     }
   };
 
@@ -100,6 +126,15 @@ const Journal = () => {
     }
   };
 
+  // Quiz handling
+  const handleQuizGenerated = (quiz: QuizData) => {
+    setCurrentQuiz(quiz);
+  };
+
+  const handleFlashcardsGenerated = (flashcards: FlashcardData) => {
+    setCurrentFlashcards(flashcards);
+  };
+
   if (loading || loadingJournal) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -124,19 +159,35 @@ const Journal = () => {
         sidebarCollapsed={sidebarCollapsed}
       />
       {/* Content area under the TopBar */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col">
           <Editor
+            key={journal.id} // Force remount when journal changes
             journalId={journal.id}
             initialContent={journal.content || ""}
             onWordCountChange={setWordCount}
+            currentQuiz={currentQuiz}
+            currentFlashcards={currentFlashcards}
+            onQuizAdded={() => {
+              console.log('Clearing current quiz state');
+              setCurrentQuiz(null);
+            }}
+            onFlashcardsAdded={() => {
+              console.log('Clearing current flashcards state');
+              setCurrentFlashcards(null);
+            }}
           />
         </div>
 
         {/* Right-side chatbot panel (desktop) */}
         {!sidebarCollapsed && (
-          <div className="hidden lg:flex w-[360px] border-l border-border bg-card">
-            <ChatbotSidebar journalTitle={journal.title} />
+          <div className="hidden lg:flex w-[360px] bg-muted rounded-l-[20px]">
+            <ChatbotSidebar
+              journalTitle={journal.title}
+              journalId={journal.id}
+              onQuizGenerated={handleQuizGenerated}
+              onFlashcardsGenerated={handleFlashcardsGenerated}
+            />
           </div>
         )}
       </div>

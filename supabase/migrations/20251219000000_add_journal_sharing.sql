@@ -9,3 +9,5 @@ ALTER TABLE journals ADD CONSTRAINT journals_share_id_unique
   EXCLUDE (share_id WITH =) WHERE (share_id IS NOT NULL);
 
 
+
+

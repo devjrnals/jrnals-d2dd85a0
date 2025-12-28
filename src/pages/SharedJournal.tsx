@@ -372,3 +372,5 @@ const SharedJournal = () => {
 export default SharedJournal;
 
 
+
+

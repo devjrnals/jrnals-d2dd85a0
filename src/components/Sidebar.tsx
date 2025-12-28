@@ -1,4 +1,4 @@
-import { Home, Search, Plus, HelpCircle, Settings, Moon, Sun, LogOut, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Home, Search, Plus, HelpCircle, Settings, Moon, Sun, LogOut, ChevronsLeft, ChevronsRight, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -12,6 +12,8 @@ import logoLight from "@/assets/logo-light.png";
 import logoDark from "@/assets/logo-dark.png";
 import { SearchPanel } from "@/components/SearchPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { PremiumPanel } from "@/components/PremiumPanel";
+import { PREMIUM_PANEL_OPEN_EVENT } from "@/lib/premiumPanel";
 
 type Journal = {
   id: string;
@@ -37,6 +39,7 @@ export const Sidebar = () => {
   const [editingTitle, setEditingTitle] = useState("");
   const [displayName, setDisplayName] = useState<string>("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [premiumOpen, setPremiumOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
 
@@ -72,6 +75,13 @@ export const Sidebar = () => {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [searchOpen]);
+
+  // Allow any part of the app to open the premium panel without prop drilling.
+  useEffect(() => {
+    const onOpen = () => setPremiumOpen(true);
+    window.addEventListener(PREMIUM_PANEL_OPEN_EVENT, onOpen as EventListener);
+    return () => window.removeEventListener(PREMIUM_PANEL_OPEN_EVENT, onOpen as EventListener);
+  }, []);
 
   // Real-time subscription for journal updates
   useEffect(() => {
@@ -180,7 +190,21 @@ export const Sidebar = () => {
   };
 
   const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+
+    // Persist per-user theme so it can be restored on next login.
+    if (user) {
+      supabase
+        .from("profiles")
+        .update({ theme: nextTheme })
+        .eq("user_id", user.id)
+        .then(({ error }) => {
+          if (error) {
+            console.error("Failed to save theme preference:", error);
+          }
+        });
+    }
   };
 
   const toggleSidebar = () => {
@@ -219,7 +243,7 @@ export const Sidebar = () => {
       } bg-sidebar border-r border-sidebar-border flex flex-col h-screen transition-all duration-300 ease-in-out overflow-hidden ${
         sidebarOpen ? '' : 'border-r-0'
       }`}>
-      <div className="p-4 border-b border-sidebar-border">
+      <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <div className={`flex items-center ${sidebarOpen ? '' : 'justify-center'}`}>
             {sidebarOpen ? (
@@ -335,26 +359,18 @@ export const Sidebar = () => {
         </div>
       </ScrollArea>
 
-      <div className="p-2 border-t border-sidebar-border space-y-1">
+      <div className="p-2 space-y-1">
         <Button
-          variant="ghost"
-          className={`w-full justify-start text-primary hover:bg-sidebar-accent`}
+          className={`w-full justify-start bg-primary hover:bg-primary/90 text-primary-foreground`}
           title="Upgrade"
+          onClick={() => setPremiumOpen(true)}
         >
-          <span className="w-4 h-4 flex items-center justify-center bg-primary rounded-full text-primary-foreground text-xs mr-3">+</span>
+          <span className="w-4 h-4 flex items-center justify-center bg-primary-foreground rounded-full text-primary text-xs mr-3">+</span>
           {sidebarOpen && <span>Upgrade</span>}
-        </Button>
-        <Button
-          variant="ghost"
-          className={`w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent`}
-          title="Quick Guide"
-        >
-          <HelpCircle className="w-4 h-4 mr-3" />
-          {sidebarOpen && <span>Quick Guide</span>}
         </Button>
       </div>
 
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-4">
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="ghost" className={`w-full justify-center hover:bg-sidebar-accent p-2`} title={sidebarOpen ? undefined : getDisplayName()}>
@@ -394,6 +410,16 @@ export const Sidebar = () => {
                   </>
                 )}
               </Button>
+              {user?.email === "alishahed798@gmail.com" && (
+                <Button
+                  variant="ghost"
+                  onClick={() => navigate("/admin")}
+                  className="w-full justify-start text-popover-foreground hover:bg-muted"
+                >
+                  <Users className="w-4 h-4 mr-3" />
+                  Admin
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 onClick={() => navigate("/settings")}
@@ -422,6 +448,8 @@ export const Sidebar = () => {
         folders={folders}
         onOpenJournal={(journalId) => navigate(`/journal/${journalId}`)}
       />
+
+      <PremiumPanel open={premiumOpen} onClose={() => setPremiumOpen(false)} />
 
     </aside>
     </div>

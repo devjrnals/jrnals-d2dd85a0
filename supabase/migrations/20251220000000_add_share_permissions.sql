@@ -55,3 +55,5 @@ CREATE TRIGGER update_journal_shares_timestamp
   EXECUTE FUNCTION update_journal_shares_updated_at();
 
 
+
+

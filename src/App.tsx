@@ -13,6 +13,11 @@ import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import FCareer from "./pages/FCareer";
+import ComingSoon from "./pages/ComingSoon";
+import Admin from "./pages/Admin";
+import { PricingDialogProvider } from "@/contexts/PricingDialogContext";
+import { UserThemeSync } from "@/contexts/UserThemeSync";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +27,9 @@ const AppContent = () => {
       <Route path="/auth" element={<Auth />} />
       <Route path="/" element={<Index />} />
       <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/fcareer" element={<FCareer />} />
+      <Route path="/coming-soon" element={<ComingSoon />} />
+      <Route path="/admin" element={<Admin />} />
       <Route path="/journal/:id" element={
         <div className="signed-in-theme flex h-screen overflow-hidden bg-background">
           <Sidebar />
@@ -59,7 +67,11 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppContent />
+        <PricingDialogProvider>
+          <UserThemeSync>
+            <AppContent />
+          </UserThemeSync>
+        </PricingDialogProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

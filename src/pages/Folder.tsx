@@ -137,21 +137,17 @@ const FolderPage = () => {
     if (!editingJournalId) return;
 
     const trimmedTitle = editingJournalTitle.trim();
-    if (!trimmedTitle) {
-      setEditingJournalId(null);
-      setEditingJournalTitle("");
-      return;
-    }
+    const finalTitle = trimmedTitle || "New Journal";
 
     const { error } = await supabase
       .from("journals")
-      .update({ title: trimmedTitle })
+      .update({ title: finalTitle })
       .eq("id", editingJournalId);
 
     if (error) {
       toast({ title: "Error updating journal", description: error.message, variant: "destructive" });
     } else {
-      setJournals(journals.map(j => j.id === editingJournalId ? { ...j, title: trimmedTitle } : j));
+      setJournals(journals.map(j => j.id === editingJournalId ? { ...j, title: finalTitle } : j));
       setEditingJournalId(null);
       setEditingJournalTitle("");
       toast({ title: "Journal updated successfully" });
@@ -163,7 +159,13 @@ const FolderPage = () => {
   };
 
   const handleAddJournals = (addedJournals: Journal[]) => {
-    setJournals(prev => [...prev, ...addedJournals]);
+    setJournals(prev => {
+      // Filter out journals that are already in the folder to prevent duplicates
+      const newJournals = addedJournals.filter(addedJournal =>
+        !prev.some(existingJournal => existingJournal.id === addedJournal.id)
+      );
+      return [...prev, ...newJournals];
+    });
     setAddJournalsOpen(false);
   };
 
@@ -281,12 +283,7 @@ const FolderPage = () => {
                           if (e.key === 'Enter') saveJournalEdit();
                         }}
                         onBlur={() => {
-                          if (editingJournalTitle.trim()) {
-                            saveJournalEdit();
-                          } else {
-                            setEditingJournalId(null);
-                            setEditingJournalTitle("");
-                          }
+                          saveJournalEdit();
                         }}
                         className="flex-1 bg-transparent border-b border-primary outline-none text-foreground font-medium"
                         autoFocus

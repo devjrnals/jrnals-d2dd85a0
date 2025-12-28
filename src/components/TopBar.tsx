@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { PanelLeftClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ShareDialog } from "@/components/ShareDialog";
 
 type TopBarProps = {
   journalTitle?: string;
@@ -10,6 +11,7 @@ type TopBarProps = {
   onMoveToTrash?: () => void;
   onToggleSidebar?: () => void;
   sidebarCollapsed?: boolean;
+  onShare?: () => void;
 };
 
 export const TopBar = ({
@@ -20,9 +22,11 @@ export const TopBar = ({
   onMoveToTrash,
   onToggleSidebar,
   sidebarCollapsed = false,
+  onShare,
 }: TopBarProps) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(journalTitle);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -31,14 +35,9 @@ export const TopBar = ({
 
   return (
     <div className="relative">
-      <div className="bg-card border-b border-border h-16">
+      <div className="bg-editor h-16">
         <div className="flex items-center justify-between px-6 h-16">
-          <div className="flex items-center gap-4 flex-1">
-            <Button variant="ghost" size="icon" className="text-foreground">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-              </svg>
-            </Button>
+          <div className="flex items-center gap-4 flex-1 pl-4">
             {isEditingTitle ? (
               <input
                 ref={titleInputRef}
@@ -80,12 +79,24 @@ export const TopBar = ({
                 <PanelLeftClose className={`w-5 h-5 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
               </Button>
             )}
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              onClick={() => setShareDialogOpen(true)}
+            >
               Share
             </Button>
           </div>
         </div>
       </div>
+
+      {journalId && (
+        <ShareDialog
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          journalId={journalId}
+          journalTitle={journalTitle}
+        />
+      )}
     </div>
   );
 };

@@ -38,6 +38,73 @@ export type Database = {
         }
         Relationships: []
       }
+      chats: {
+        Row: {
+          created_at: string
+          id: string
+          journal_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          journal_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          journal_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chats_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: true
+            referencedRelation: "journals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          chat_id: string
+          content: string
+          created_at: string
+          files: Json | null
+          id: string
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          chat_id: string
+          content: string
+          created_at?: string
+          files?: Json | null
+          id?: string
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: string
+          content?: string
+          created_at?: string
+          files?: Json | null
+          id?: string
+          role?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journal_shares: {
         Row: {
           allowed_emails: string[] | null
@@ -127,12 +194,55 @@ export type Database = {
           },
         ]
       }
+      admin_data: {
+        Row: {
+          created_at: string
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
+      coming_soon_emails: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           display_name: string | null
           id: string
+          theme: string | null
           updated_at: string
           user_id: string
         }
@@ -141,6 +251,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id: string
+          theme?: string | null
           updated_at?: string
           user_id: string
         }
@@ -149,6 +260,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          theme?: string | null
           updated_at?: string
           user_id?: string
         }

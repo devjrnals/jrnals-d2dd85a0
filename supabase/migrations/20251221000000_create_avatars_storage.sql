@@ -31,3 +31,5 @@ CREATE POLICY "Users can delete their own avatar"
     bucket_id = 'avatars'
     AND auth.uid()::text = (storage.foldername(name))[1]
   );
+
+

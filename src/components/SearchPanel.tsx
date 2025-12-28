@@ -57,7 +57,34 @@ export function SearchPanel({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
 
-  const recentJournals = useMemo(() => journals.slice(0, 6), [journals]);
+  // Filter journals based on search query
+  const filteredJournals = useMemo(() => {
+    if (!query.trim()) {
+      // Show all journals when no search query
+      return journals;
+    }
+
+    const lowerQuery = query.toLowerCase().trim();
+    return journals.filter(journal =>
+      journal.title.toLowerCase().includes(lowerQuery)
+    );
+  }, [journals, query]);
+
+  // Sort journals: recent first, then alphabetical
+  const sortedJournals = useMemo(() => {
+    return [...filteredJournals].sort((a, b) => {
+      // Sort by recency first
+      const aTime = new Date(a.updated_at || 0).getTime();
+      const bTime = new Date(b.updated_at || 0).getTime();
+
+      if (aTime !== bTime) {
+        return bTime - aTime; // Most recent first
+      }
+
+      // Then alphabetically by title
+      return a.title.localeCompare(b.title);
+    });
+  }, [filteredJournals]);
 
   useEffect(() => {
     if (!open) return;
@@ -106,7 +133,7 @@ export function SearchPanel({
           <div className="relative">
             <CommandInput
               ref={inputRef}
-              placeholder="search"
+              placeholder="Search all journals..."
               value={query}
               onValueChange={setQuery}
               className="h-14 text-[15px]"
@@ -118,45 +145,53 @@ export function SearchPanel({
             </div>
           </div>
 
-          <CommandList className="max-h-[420px] p-2">
-            <CommandEmpty className="py-10 text-center text-sm text-muted-foreground">
-              No results found.
-            </CommandEmpty>
+          <div className="relative">
+            <CommandList className="max-h-[420px] p-2 overflow-y-auto scrollbar-thin">
+              <CommandEmpty className="py-10 text-center text-sm text-muted-foreground">
+                {query.trim() ? "No journals found matching your search." : "No journals available."}
+              </CommandEmpty>
 
-            {query.trim().length === 0 && recentJournals.length > 0 && (
-              <>
-                <CommandGroup heading="Recently opened">
-                  {recentJournals.map((j) => (
-                    <CommandItem
-                      key={j.id}
-                      value={`journal:${j.id}`}
-                      onSelect={() => {
-                        onOpenJournal(j.id);
-                        onClose();
-                      }}
-                      className="gap-3 rounded-xl px-3 py-3"
-                    >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <FileText className="h-5 w-5" />
+            {sortedJournals.length > 0 && (
+              <CommandGroup
+                heading={query.trim() ?
+                  `Search Results (${sortedJournals.length} journal${sortedJournals.length === 1 ? '' : 's'})` :
+                  `All Journals (${sortedJournals.length})`
+                }
+              >
+                {sortedJournals.map((j) => (
+                  <CommandItem
+                    key={j.id}
+                    value={`journal:${j.id}`}
+                    onSelect={() => {
+                      onOpenJournal(j.id);
+                      onClose();
+                    }}
+                    className="gap-3 rounded-xl px-3 py-3"
+                  >
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-foreground">
+                        {j.title}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium text-foreground">
-                          {j.title}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          Last opened {timeAgo(j.updated_at)}
-                        </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {j.updated_at ? `Last opened ${timeAgo(j.updated_at)}` : "Never opened"}
                       </div>
-                      <CommandShortcut>↵</CommandShortcut>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-                <CommandSeparator />
-              </>
+                    </div>
+                    <CommandShortcut>↵</CommandShortcut>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
             )}
 
+            </CommandList>
 
-          </CommandList>
+            {/* Visual fade indicator for scrollable content */}
+            {sortedJournals.length > 6 && (
+              <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-background to-transparent pointer-events-none rounded-b-xl" />
+            )}
+          </div>
         </Command>
       </div>
     </div>

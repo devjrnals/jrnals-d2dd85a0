@@ -1,0 +1,283 @@
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Users, DollarSign, Eye, Mail, RefreshCw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { initializeAdminTables } from "@/lib/initAdminTables";
+
+interface AdminData {
+  visitor_count: number;
+  accounts_signed_up: number;
+  revenue: number;
+}
+
+interface ComingSoonEmail {
+  id: string;
+  email: string;
+  created_at: string;
+}
+
+const Admin = () => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [adminData, setAdminData] = useState<AdminData>({
+    visitor_count: 0,
+    accounts_signed_up: 0,
+    revenue: 0,
+  });
+  const [emails, setEmails] = useState<ComingSoonEmail[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Check if user is admin
+  useEffect(() => {
+    if (!loading && (!user || user.email !== "alishahed798@gmail.com")) {
+      navigate("/dashboard");
+      return;
+    }
+  }, [user, loading, navigate]);
+
+  const loadAdminData = async () => {
+    try {
+      setLoadingData(true);
+
+      // Try to initialize tables if they don't exist
+      await initializeAdminTables();
+
+      // Load admin metrics
+      const { data: adminMetrics, error: metricsError } = await supabase
+        .from("admin_data")
+        .select("key, value");
+
+      if (metricsError) {
+        console.error("Error loading admin metrics:", metricsError);
+        // If table doesn't exist, use default values
+        if (metricsError.message?.includes('relation "public.admin_data" does not exist')) {
+          console.log("Admin data table not found - using default values");
+          setAdminData({ visitor_count: 0, accounts_signed_up: 0, revenue: 0 });
+        }
+      } else {
+        const newAdminData = { ...adminData };
+        adminMetrics?.forEach((item) => {
+          if (item.key === "visitor_count") {
+            newAdminData.visitor_count = parseInt(item.value as string) || 0;
+          } else if (item.key === "accounts_signed_up") {
+            newAdminData.accounts_signed_up = parseInt(item.value as string) || 0;
+          } else if (item.key === "revenue") {
+            newAdminData.revenue = parseFloat(item.value as string) || 0;
+          }
+        });
+        setAdminData(newAdminData);
+      }
+
+      // Load coming soon emails
+      const { data: emailData, error: emailError } = await supabase
+        .from("coming_soon_emails")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (emailError) {
+        console.error("Error loading emails:", emailError);
+        // If table doesn't exist, show a helpful message instead of error
+        if (emailError.message?.includes('relation "public.coming_soon_emails" does not exist')) {
+          console.log("Coming soon emails table not found - this is expected if migrations haven't been run yet");
+          setEmails([]);
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to load email data",
+            variant: "destructive",
+          });
+        }
+      } else {
+        setEmails(emailData || []);
+      }
+    } catch (error) {
+      console.error("Error loading admin data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load admin data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const updateRevenue = async (newRevenue: number) => {
+    try {
+      const { error } = await supabase
+        .from("admin_data")
+        .update({ value: newRevenue.toString(), updated_at: new Date().toISOString() })
+        .eq("key", "revenue");
+
+      if (error) {
+        throw error;
+      }
+
+      setAdminData(prev => ({ ...prev, revenue: newRevenue }));
+      toast({
+        title: "Success",
+        description: "Revenue updated successfully",
+      });
+    } catch (error) {
+      console.error("Error updating revenue:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update revenue",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (user?.email === "alishahed798@gmail.com") {
+      loadAdminData();
+    }
+  }, [user]);
+
+  if (loading || !user || user.email !== "alishahed798@gmail.com") {
+    return (
+      <div className="signed-in-theme flex h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
+          <p className="text-muted-foreground">You don't have permission to view this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="signed-in-theme flex h-screen overflow-hidden bg-background">
+      <div className="flex-1 overflow-auto">
+        <div className="container mx-auto p-6 max-w-7xl">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
+            <p className="text-muted-foreground">
+              Monitor site analytics and manage data
+            </p>
+          </div>
+
+          {/* Metrics Cards */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Page Visitors</CardTitle>
+                <Eye className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {loadingData ? "..." : adminData.visitor_count.toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total unique visitors
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Accounts Signed Up</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {loadingData ? "..." : adminData.accounts_signed_up.toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Registered users
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Revenue</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  ${loadingData ? "..." : adminData.revenue.toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total revenue
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Coming Soon Emails</CardTitle>
+                <Mail className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {loadingData ? "..." : emails.length.toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Email subscriptions
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Coming Soon Emails List */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Coming Soon Email List</span>
+                <Button
+                  onClick={loadAdminData}
+                  variant="outline"
+                  size="sm"
+                  disabled={loadingData}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loadingData ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </CardTitle>
+              <CardDescription>
+                Emails collected from the coming soon page
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingData ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin" />
+                  <span className="ml-2">Loading...</span>
+                </div>
+              ) : emails.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No emails collected yet
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {emails.map((email) => (
+                    <div
+                      key={email.id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{email.email}</span>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {new Date(email.created_at).toLocaleDateString()}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Admin;
