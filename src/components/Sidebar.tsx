@@ -193,18 +193,8 @@ export const Sidebar = () => {
     const nextTheme = theme === "dark" ? "light" : "dark";
     setTheme(nextTheme);
 
-    // Persist per-user theme so it can be restored on next login.
-    if (user) {
-      supabase
-        .from("profiles")
-        .update({ theme: nextTheme })
-        .eq("user_id", user.id)
-        .then(({ error }) => {
-          if (error) {
-            console.error("Failed to save theme preference:", error);
-          }
-        });
-    }
+    // Theme persistence is handled elsewhere - profiles table doesn't have theme column yet
+    // To add theme persistence, run a migration to add the theme column to profiles
   };
 
   const toggleSidebar = () => {

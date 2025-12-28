@@ -7,12 +7,14 @@ const Index = () => {
     // Track visitor count - only increment once per session
     const visitorTracked = sessionStorage.getItem('visitorTracked');
     if (!visitorTracked) {
-      supabase.rpc('increment_visitor_count').then(() => {
-        sessionStorage.setItem('visitorTracked', 'true');
-      }).catch((error) => {
-        // Silently handle if function/table doesn't exist yet
-        console.log('Visitor tracking not available yet:', error.message);
-      });
+      (supabase.rpc('increment_visitor_count' as any) as unknown as Promise<any>)
+        .then(() => {
+          sessionStorage.setItem('visitorTracked', 'true');
+        })
+        .catch((error: any) => {
+          // Silently handle if function/table doesn't exist yet
+          console.log('Visitor tracking not available yet:', error?.message);
+        });
     }
   }, []);
 

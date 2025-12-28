@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 import FCareer from "./pages/FCareer";
 import ComingSoon from "./pages/ComingSoon";
 import Admin from "./pages/Admin";
+import { Landing } from "@/components/Landing";
 import { PricingDialogProvider } from "@/contexts/PricingDialogContext";
 import { UserThemeSync } from "@/contexts/UserThemeSync";
 
@@ -26,6 +27,7 @@ const AppContent = () => {
     <Routes>
       <Route path="/auth" element={<Auth />} />
       <Route path="/" element={<ComingSoon />} />
+      <Route path="/landing" element={<Landing />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/fcareer" element={<FCareer />} />
       <Route path="/coming-soon" element={<ComingSoon />} />

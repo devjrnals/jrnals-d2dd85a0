@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 interface ChatMessage {
   id: string;
@@ -9,7 +10,6 @@ interface ChatMessage {
 
 interface AIRequest {
   journalId: string;
-  chatId: string;
   journalTitle?: string;
   messages: ChatMessage[];
   userMessage: string;
@@ -18,16 +18,16 @@ interface AIRequest {
   isFlashcardsRequest: boolean;
 }
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 serve(async (req) => {
   // Enable CORS
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      },
-    })
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
@@ -35,16 +35,45 @@ serve(async (req) => {
     if (req.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method not allowed' }), {
         status: 405,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
+
+    // Verify user authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      console.error('No authorization header provided');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: No authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error('Authentication failed:', authError?.message || 'No user found');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Authenticated user:', user.id);
 
     // Get OpenAI API key from environment
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
     if (!openaiApiKey) {
       return new Response(JSON.stringify({ error: 'OpenAI API key not configured' }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
@@ -52,14 +81,14 @@ serve(async (req) => {
     const body: AIRequest = await req.json()
 
     // Validate required fields
-    if (!body.journalId || !body.chatId || !body.userMessage || !Array.isArray(body.messages)) {
-      return new Response(JSON.stringify({ error: 'Missing required fields: journalId, chatId, userMessage, messages' }), {
+    if (!body.journalId || !body.userMessage || !Array.isArray(body.messages)) {
+      return new Response(JSON.stringify({ error: 'Missing required fields: journalId, userMessage, messages' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // Validate that messages belong to this journal (additional safeguard)
+    // Validate that messages have proper structure
     const isValidMessages = body.messages.every(msg =>
       msg.role && typeof msg.content === 'string' && msg.id
     )
@@ -67,24 +96,11 @@ serve(async (req) => {
     if (!isValidMessages) {
       return new Response(JSON.stringify({ error: 'Invalid message context' }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    // Validate that chatId belongs to journalId (critical isolation check)
-    const { data: chatValidation, error: chatError } = await supabase
-      .from('chats')
-      .select('id, journal_id')
-      .eq('id', body.chatId)
-      .eq('journal_id', body.journalId)
-      .single()
-
-    if (chatError || !chatValidation) {
-      return new Response(JSON.stringify({ error: 'Invalid chat context - chat does not belong to journal' }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
+    console.log('Processing AI chat request for user', user.id, 'journal:', body.journalId);
 
     // Build system prompt based on request type
     let systemPrompt: string
@@ -124,10 +140,10 @@ Use the provided files if any to make flashcards more relevant and accurate.`
     } else {
       systemPrompt = `You are a helpful AI assistant for a journal/note-taking application. The user is currently working on a journal titled "${body.journalTitle || 'Untitled'}". Provide helpful, relevant responses to their questions about journaling, writing, organization, or any other topics they bring up. When files are provided, analyze their contents and use that information to provide more relevant and informed responses. Be concise but informative.
 
-IMPORTANT: This is an isolated conversation for journal ID: ${body.journalId} and chat ID: ${body.chatId}. Do not reference or recall information from any other journals, chats, or conversations. This conversation is completely separate and independent.`
+IMPORTANT: This is an isolated conversation for journal ID: ${body.journalId}. Do not reference or recall information from any other journals or conversations. This conversation is completely separate and independent.`
     }
 
-    // Build conversation history (only include validated messages)
+    // Build conversation history
     const conversationMessages = body.messages.map(m => {
       let content = m.content;
       if (m.files && m.files.length > 0) {
@@ -173,7 +189,7 @@ IMPORTANT: This is an isolated conversation for journal ID: ${body.journalId} an
       console.error('OpenAI API error:', errorData)
       return new Response(JSON.stringify({ error: 'AI service temporarily unavailable' }), {
         status: 503,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
@@ -183,28 +199,24 @@ IMPORTANT: This is an isolated conversation for journal ID: ${body.journalId} an
     if (!aiResponse) {
       return new Response(JSON.stringify({ error: 'No response from AI service' }), {
         status: 503,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
     // Return successful response
     return new Response(JSON.stringify({
       response: aiResponse,
-      journalId: body.journalId // Echo back for validation
+      journalId: body.journalId
     }), {
       status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
 
   } catch (error) {
     console.error('AI chat function error:', error)
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
 })
