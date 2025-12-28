@@ -25,7 +25,7 @@ const AppContent = () => {
   return (
     <Routes>
       <Route path="/auth" element={<Auth />} />
-      <Route path="/" element={<Index />} />
+      <Route path="/" element={<ComingSoon />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/fcareer" element={<FCareer />} />
       <Route path="/coming-soon" element={<ComingSoon />} />
