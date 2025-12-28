@@ -336,7 +336,7 @@ export const Editor = ({
             type: 'text' as const,
             content: typeof block.content === 'string' ? block.content : JSON.stringify(block)
           } as TextBlock;
-        }).filter((block): block is Block => block !== null);
+        });
         
         console.log('Restored blocks:', restoredBlocks.length, 'blocks, including', 
           restoredBlocks.filter(b => b.type === 'flashcards').length, 'flashcard blocks');

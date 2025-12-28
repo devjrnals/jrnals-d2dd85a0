@@ -184,9 +184,6 @@ const Journal = () => {
           <div className="hidden lg:flex w-[360px] bg-muted rounded-l-[20px]">
             <ChatbotSidebar
               journalTitle={journal.title}
-              journalId={journal.id}
-              onQuizGenerated={handleQuizGenerated}
-              onFlashcardsGenerated={handleFlashcardsGenerated}
             />
           </div>
         )}
