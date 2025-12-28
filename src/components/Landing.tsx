@@ -4,131 +4,108 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { usePricingDialog } from "@/contexts/PricingDialogContext";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  FileText,
-  Sparkles,
-  Brain,
-  Search,
-  Star,
-  Quote,
-  PackageSearch,
-  Code2,
-  Telescope,
-  Share2,
-  RefreshCw,
-} from "lucide-react";
+import { FileText, Sparkles, Brain, Search, Star, Quote, PackageSearch, Code2, Telescope, Share2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import landingLogo from "@/assets/landing-logo.png";
 import { SiteFooter } from "@/components/SiteFooter";
-
 export const Landing = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { openPricing } = usePricingDialog();
+  const {
+    openPricing
+  } = usePricingDialog();
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
-
   useEffect(() => {
     const onScroll = () => setIsHeaderScrolled(window.scrollY > 8);
     onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("scroll", onScroll, {
+      passive: true
+    });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
   useEffect(() => {
     if (!location.hash) return;
     const id = location.hash.replace("#", "");
     const el = document.getElementById(id);
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
   }, [location.hash]);
 
   // Auto-load *any* images placed in src/assets/partner-logos/
   // (filenames and university names don't matter).
-  const partnerLogoModules = import.meta.glob(
-    "../assets/partner-logos/*.{png,jpg,jpeg,webp,svg}",
-    { eager: true, query: "?url", import: "default" },
-  ) as Record<string, string>;
-
+  const partnerLogoModules = import.meta.glob("../assets/partner-logos/*.{png,jpg,jpeg,webp,svg}", {
+    eager: true,
+    query: "?url",
+    import: "default"
+  }) as Record<string, string>;
   const partnerLogoUrls = Object.values(partnerLogoModules);
-
-  const partnerLogos =
-    partnerLogoUrls.length > 0
-      ? partnerLogoUrls.map((src, i) => ({ alt: `University logo ${i + 1}`, src }))
-      : [
-          // Fallback to repo-provided placeholders if no assets were added yet
-          { alt: "Harvard", src: "/logos/harvard.svg" },
-          { alt: "MIT", src: "/logos/mit.svg" },
-          { alt: "Stanford", src: "/logos/stanford.svg" },
-          { alt: "Yale", src: "/logos/yale.svg" },
-          { alt: "Michigan", src: "/logos/michigan.svg" },
-          { alt: "Caltech", src: "/logos/caltech.svg" },
-        ];
-
-  return (
-    <div className="min-h-screen bg-white text-gray-900" style={{
-      '--background': '0 0% 100%',
-      '--foreground': '222.2 84% 4.9%',
-      '--card': '0 0% 100%',
-      '--card-foreground': '222.2 84% 4.9%',
-      '--popover': '0 0% 100%',
-      '--popover-foreground': '222.2 84% 4.9%',
-      '--primary': '221.2 83.2% 53.3%',
-      '--primary-foreground': '210 40% 98%',
-      '--secondary': '210 40% 96%',
-      '--secondary-foreground': '222.2 84% 4.9%',
-      '--muted': '210 40% 96%',
-      '--muted-foreground': '215.4 16.3% 46.9%',
-      '--accent': '210 40% 96%',
-      '--accent-foreground': '222.2 84% 4.9%',
-      '--destructive': '0 84.2% 60.2%',
-      '--destructive-foreground': '210 40% 98%',
-      '--border': '214.3 31.8% 91.4%',
-      '--input': '214.3 31.8% 91.4%',
-      '--ring': '221.2 83.2% 53.3%',
-      '--radius': '0.5rem',
-    } as React.CSSProperties}>
+  const partnerLogos = partnerLogoUrls.length > 0 ? partnerLogoUrls.map((src, i) => ({
+    alt: `University logo ${i + 1}`,
+    src
+  })) : [
+  // Fallback to repo-provided placeholders if no assets were added yet
+  {
+    alt: "Harvard",
+    src: "/logos/harvard.svg"
+  }, {
+    alt: "MIT",
+    src: "/logos/mit.svg"
+  }, {
+    alt: "Stanford",
+    src: "/logos/stanford.svg"
+  }, {
+    alt: "Yale",
+    src: "/logos/yale.svg"
+  }, {
+    alt: "Michigan",
+    src: "/logos/michigan.svg"
+  }, {
+    alt: "Caltech",
+    src: "/logos/caltech.svg"
+  }];
+  return <div className="min-h-screen bg-white text-gray-900" style={{
+    '--background': '0 0% 100%',
+    '--foreground': '222.2 84% 4.9%',
+    '--card': '0 0% 100%',
+    '--card-foreground': '222.2 84% 4.9%',
+    '--popover': '0 0% 100%',
+    '--popover-foreground': '222.2 84% 4.9%',
+    '--primary': '221.2 83.2% 53.3%',
+    '--primary-foreground': '210 40% 98%',
+    '--secondary': '210 40% 96%',
+    '--secondary-foreground': '222.2 84% 4.9%',
+    '--muted': '210 40% 96%',
+    '--muted-foreground': '215.4 16.3% 46.9%',
+    '--accent': '210 40% 96%',
+    '--accent-foreground': '222.2 84% 4.9%',
+    '--destructive': '0 84.2% 60.2%',
+    '--destructive-foreground': '210 40% 98%',
+    '--border': '214.3 31.8% 91.4%',
+    '--input': '214.3 31.8% 91.4%',
+    '--ring': '221.2 83.2% 53.3%',
+    '--radius': '0.5rem'
+  } as React.CSSProperties}>
       {/* Header */}
-      <header
-        className={cn(
-          "fixed inset-x-0 top-0 z-50 border-b transition-colors",
-          "supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:saturate-150",
-          isHeaderScrolled
-            ? "border-border/70 bg-background/85 shadow-sm"
-            : "border-transparent bg-background/55",
-        )}
-      >
+      <header className={cn("fixed inset-x-0 top-0 z-50 border-b transition-colors", "supports-[backdrop-filter]:backdrop-blur-xl supports-[backdrop-filter]:saturate-150", isHeaderScrolled ? "border-border/70 bg-background/85 shadow-sm" : "border-transparent bg-background/55")}>
         <div className="container flex h-16 items-center justify-between px-8">
           <div className="flex items-center gap-8">
-            <button
-              type="button"
-              className="flex items-center"
-              aria-label="Go to home"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            >
-              <img
-                src={landingLogo}
-                alt="Jrnals"
-                className="h-7 w-auto"
-                loading="eager"
-              />
+            <button type="button" className="flex items-center" aria-label="Go to home" onClick={() => window.scrollTo({
+            top: 0,
+            behavior: "smooth"
+          })}>
+              <img src={landingLogo} alt="Jrnals" className="h-7 w-auto" loading="eager" />
             </button>
             <nav className="hidden md:flex gap-6">
-              <button
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => navigate("/#features")}
-              >
+              <button className="text-sm text-muted-foreground hover:text-foreground transition-colors" onClick={() => navigate("/#features")}>
                 Features
               </button>
-              <button
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                onClick={openPricing}
-              >
+              <button className="text-sm text-muted-foreground hover:text-foreground transition-colors" onClick={openPricing}>
                 Pricing
               </button>
-              <button
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => navigate("/fcareer")}
-              >
+              <button className="text-sm text-muted-foreground hover:text-foreground transition-colors" onClick={() => navigate("/fcareer")}>
                 Careers
               </button>
             </nav>
@@ -144,7 +121,7 @@ export const Landing = () => {
       <section className="container px-8 py-20 text-center">
         <Badge variant="secondary" className="mb-6">
           <Sparkles className="w-3 h-3 mr-1" />
-          Backed by Y Combinator
+          Built by Students  
         </Badge>
         
         <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-6 max-w-3xl mx-auto">
@@ -183,16 +160,9 @@ export const Landing = () => {
         </p>
         <div className="relative overflow-hidden rounded-2xl py-8 marquee-edge-fade">
           <div className="flex min-w-max items-center gap-16 animate-marquee pr-16">
-            {partnerLogos.concat(partnerLogos).map((logo, index) => (
-              <div key={`${logo.src}-${index}`} className="flex-shrink-0 px-4">
-                <img
-                  src={logo.src}
-                  alt={logo.alt}
-                  loading="lazy"
-                  className="h-16 w-auto md:h-20 drop-shadow-sm"
-                />
-              </div>
-            ))}
+            {partnerLogos.concat(partnerLogos).map((logo, index) => <div key={`${logo.src}-${index}`} className="flex-shrink-0 px-4">
+                <img src={logo.src} alt={logo.alt} loading="lazy" className="h-16 w-auto md:h-20 drop-shadow-sm" />
+              </div>)}
           </div>
         </div>
       </section>
@@ -341,9 +311,7 @@ export const Landing = () => {
           <div className="bg-card border border-border rounded-xl p-8 relative">
             <Quote className="w-8 h-8 text-primary/20 absolute top-4 right-4" />
             <div className="flex mb-4">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-              ))}
+              {[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />)}
             </div>
             <p className="text-muted-foreground mb-6 leading-relaxed">
               "Jrnals transformed how I study. The AI summaries and interactive quizzes helped me ace my finals. It's like having a personal tutor available 24/7."
@@ -363,9 +331,7 @@ export const Landing = () => {
           <div className="bg-card border border-border rounded-xl p-8 relative">
             <Quote className="w-8 h-8 text-primary/20 absolute top-4 right-4" />
             <div className="flex mb-4">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-              ))}
+              {[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />)}
             </div>
             <p className="text-muted-foreground mb-6 leading-relaxed">
               "The chatbot feature is incredible. I can ask complex questions about my course materials and get detailed, referenced answers instantly. Game-changer!"
@@ -385,9 +351,7 @@ export const Landing = () => {
           <div className="bg-card border border-border rounded-xl p-8 relative">
             <Quote className="w-8 h-8 text-primary/20 absolute top-4 right-4" />
             <div className="flex mb-4">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
-              ))}
+              {[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />)}
             </div>
             <p className="text-muted-foreground mb-6 leading-relaxed">
               "From PDF uploads to interactive learning, Jrnals covers everything. The organization features keep me on track with multiple courses and deadlines."
@@ -478,6 +442,5 @@ export const Landing = () => {
       <SiteFooter />
 
       </main>
-    </div>
-  );
+    </div>;
 };
