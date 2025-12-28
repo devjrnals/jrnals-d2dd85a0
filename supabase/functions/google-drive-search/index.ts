@@ -98,11 +98,34 @@ serve(async (req) => {
       throw new Error('Search query is required');
     }
 
+    // Input validation - only allow safe characters to prevent query injection
+    // This prevents injection of Google Drive query operators like AND, OR, NOT, field operators
+    const sanitizedQuery = String(query).trim();
+    
+    if (sanitizedQuery.length > 200) {
+      throw new Error('Search query is too long (max 200 characters)');
+    }
+    
+    if (sanitizedQuery.length < 1) {
+      throw new Error('Search query cannot be empty');
+    }
+    
+    // Allow alphanumeric, spaces, hyphens, underscores, periods, and common punctuation
+    // Block special characters that could be used for query injection
+    if (!/^[a-zA-Z0-9\s\-_.,'!?@#$%&*()[\]{}:;"+/\\]+$/.test(sanitizedQuery)) {
+      throw new Error('Search query contains invalid characters');
+    }
+    
+    // Additional sanitization: escape single quotes for the Drive API query
+    const escapedQuery = sanitizedQuery.replace(/'/g, "\\'");
+
+    console.log('Searching Google Drive for user', user.id, 'query:', sanitizedQuery.substring(0, 50));
+
     // Search Google Drive
     const searchParams = new URLSearchParams({
-      q: `fullText contains '${query.replace(/'/g, "\\'")}' and trashed=false`,
+      q: `fullText contains '${escapedQuery}' and trashed=false`,
       fields: 'files(id, name, mimeType, modifiedTime, webViewLink, iconLink, size)',
-      pageSize: maxResults.toString(),
+      pageSize: Math.min(Math.max(1, Number(maxResults) || 10), 50).toString(), // Limit between 1-50
     });
 
     const driveResponse = await fetch(

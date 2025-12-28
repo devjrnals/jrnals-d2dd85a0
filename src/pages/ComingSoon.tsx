@@ -1,55 +1,40 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import landingLogo from "@/assets/landing-logo.png";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { z } from "zod";
+
+// Email validation schema
+const emailSchema = z.string().trim().email({ message: "Invalid email address" }).max(255, { message: "Email is too long" });
 
 export default function ComingSoon() {
-  const navigate = useNavigate();
   // Render on a fixed 16:9 "artboard" and scale to the viewport so spacing + type match the reference image.
   const DESIGN = useMemo(() => ({ w: 1440, h: 810 }), []);
   const [scale, setScale] = useState(1);
-  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
   const { toast } = useToast();
 
-  const handlePasswordSubmit = () => {
-    // Simple password check - you might want to make this more secure
-    if (password === "access2024") {
-      setIsPasswordDialogOpen(false);
-      setPassword("");
-      setError("");
-      navigate("/");
-    } else {
-      setError("Incorrect password");
-    }
-  };
-
-  const handleAccessClick = () => {
-    setIsPasswordDialogOpen(true);
-  };
-
   const handleEmailSubmit = async () => {
-    if (!email.trim()) {
+    // Validate email with zod
+    const result = emailSchema.safeParse(email);
+    if (!result.success) {
       toast({
         title: "Error",
-        description: "Please enter a valid email address",
+        description: result.error.errors[0]?.message || "Please enter a valid email address",
         variant: "destructive",
       });
       return;
     }
 
+    const validatedEmail = result.data;
     setEmailLoading(true);
     try {
       const { error } = await supabase
         .from("coming_soon_emails")
-        .insert([{ email: email.trim() }]);
+        .insert([{ email: validatedEmail }]);
 
       if (error) {
         if (error.code === '23505') { // Unique constraint violation
@@ -63,7 +48,6 @@ export default function ComingSoon() {
             title: "Thank you!",
             description: "Your email has been noted. Database setup is in progress.",
           });
-          console.log("Email submitted but table doesn't exist yet:", email);
         } else {
           throw error;
         }
@@ -154,9 +138,6 @@ export default function ComingSoon() {
               <button type="button" className="hover:text-black transition-colors">
                 Twitter
               </button>
-              <button type="button" className="hover:text-black transition-colors" onClick={handleAccessClick}>
-                Access
-              </button>
             </nav>
           </div>
 
@@ -208,6 +189,11 @@ export default function ComingSoon() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleEmailSubmit();
+                      }
+                    }}
                     placeholder="Your email"
                     className="h-10 rounded-none border-0 border-b border-black/40 bg-transparent px-0 text-black placeholder:text-black/50 focus-visible:ring-0 focus-visible:ring-offset-0"
                   />
@@ -226,51 +212,6 @@ export default function ComingSoon() {
           </div>
         </div>
       </div>
-
-      {/* Password Dialog */}
-      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Access Required</DialogTitle>
-            <DialogDescription>
-              Enter the password to access the full site.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="password" className="col-span-4 text-sm font-medium">
-                Password
-              </label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handlePasswordSubmit();
-                  }
-                }}
-                className="col-span-4"
-                placeholder="Enter password"
-              />
-              {error && (
-                <p className="col-span-4 text-sm text-red-600">{error}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handlePasswordSubmit}>
-              Access
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
-
-
