@@ -7,9 +7,30 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 
+type QuizData = {
+  title: string;
+  questions: Array<{
+    question: string;
+    options: string[];
+    correctAnswer: number;
+  }>;
+};
+
+type FlashcardData = {
+  title: string;
+  cards: Array<{
+    id: string;
+    front: string;
+    back: string;
+  }>;
+};
+
 type ChatbotSidebarProps = {
   journalTitle?: string;
+  journalId?: string;
   className?: string;
+  onQuizGenerated?: (quiz: QuizData) => void;
+  onFlashcardsGenerated?: (flashcards: FlashcardData) => void;
 };
 
 type ChatMessage = {
@@ -29,7 +50,7 @@ const id = () => {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 
-export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps) {
+export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGenerated, onFlashcardsGenerated }: ChatbotSidebarProps) {
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; content: string; type: string }>>([]);
@@ -108,6 +129,116 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
 
   const removeFile = (index: number) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const parseQuizResponse = (response: string): QuizData | null => {
+    try {
+      console.log('Parsing quiz response:', response);
+      const lines = response.split('\n').map(line => line.trim()).filter(line => line);
+
+      // Find title
+      const titleLine = lines.find(line => line.startsWith('QUIZ_TITLE:'));
+      const title = titleLine ? titleLine.replace('QUIZ_TITLE:', '').trim() : 'Quiz';
+
+      const questions: any[] = [];
+      let currentQuestion: any = {};
+      let currentOptions: string[] = [];
+
+      for (const line of lines) {
+        if (line.startsWith('QUESTION ')) {
+          // Save previous question if exists
+          if (currentQuestion.question && currentOptions.length === 4 && currentQuestion.correctAnswer !== undefined) {
+            questions.push({
+              question: currentQuestion.question,
+              options: currentOptions,
+              correctAnswer: currentQuestion.correctAnswer
+            });
+          }
+
+          // Start new question
+          currentQuestion = { question: line.split(':').slice(1).join(':').trim() };
+          currentOptions = [];
+        } else if (line.match(/^[A-D]\)/)) {
+          const option = line.substring(3).trim();
+          currentOptions.push(option);
+        } else if (line.startsWith('CORRECT:')) {
+          const correctLetter = line.replace('CORRECT:', '').trim().toUpperCase();
+          const correctIndex = ['A', 'B', 'C', 'D'].indexOf(correctLetter);
+          if (correctIndex !== -1) {
+            currentQuestion.correctAnswer = correctIndex;
+          }
+        }
+      }
+
+      // Add final question
+      if (currentQuestion.question && currentOptions.length === 4 && currentQuestion.correctAnswer !== undefined) {
+        questions.push({
+          question: currentQuestion.question,
+          options: currentOptions,
+          correctAnswer: currentQuestion.correctAnswer
+        });
+      }
+
+      const result = questions.length > 0 ? { title, questions } : null;
+      console.log('Parsed quiz result:', result);
+      return result;
+    } catch (error) {
+      console.error('Error parsing quiz response:', error);
+      return null;
+    }
+  };
+
+  const parseFlashcardsResponse = (response: string): FlashcardData | null => {
+    try {
+      console.log('Parsing flashcards response:', response);
+      const lines = response.split('\n').map(line => line.trim()).filter(line => line);
+
+      let title = 'Flashcards';
+      const cards: Array<{ id: string; front: string; back: string }> = [];
+      let currentCard: { front: string; back: string } | null = null;
+
+      for (const line of lines) {
+        if (line.startsWith('FLASHCARDS_TITLE:')) {
+          title = line.replace('FLASHCARDS_TITLE:', '').trim();
+        } else if (line.startsWith('CARD ')) {
+          // Save previous card if exists
+          if (currentCard && currentCard.front && currentCard.back) {
+            cards.push({
+              id: `card-${cards.length + 1}`,
+              front: currentCard.front,
+              back: currentCard.back
+            });
+          }
+
+          // Start new card
+          currentCard = { front: '', back: '' };
+        } else if (line.startsWith('FRONT:')) {
+          if (currentCard) {
+            currentCard.front = line.replace('FRONT:', '').trim();
+          }
+        } else if (line.startsWith('BACK:')) {
+          if (currentCard) {
+            currentCard.back = line.replace('BACK:', '').trim();
+          }
+        }
+      }
+
+      // Add final card
+      if (currentCard && currentCard.front && currentCard.back) {
+        cards.push({
+          id: `card-${cards.length + 1}`,
+          front: currentCard.front,
+          back: currentCard.back
+        });
+      }
+
+      const result = cards.length > 0 ? { title, cards } : null;
+      console.log('Parsed flashcards result:', result);
+      return result;
+    } catch (error) {
+      console.error('Error parsing flashcards response:', error);
+      return null;
+    }
   };
 
   const streamChat = async ({
@@ -203,6 +334,9 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
     const trimmed = text.trim();
     if ((!trimmed && uploadedFiles.length === 0) || isLoading) return;
 
+    const isQuizRequest = trimmed.toLowerCase().includes("quiz me on");
+    const isFlashcardsRequest = trimmed.toLowerCase().includes("create flashcards on") || trimmed.toLowerCase().includes("flashcards on");
+
     // Add user message immediately
     setMessages((prev) => [
       ...prev,
@@ -235,7 +369,7 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
     const userContent = currentFiles.length > 0
       ? `${currentText}\n\n--- Attached Files ---\n${currentFiles.map(file => `## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\``).join('\n')}`
       : currentText;
-    
+
     apiMessages.push({ role: 'user', content: userContent });
 
     let assistantContent = "";
@@ -255,7 +389,37 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
         messages: apiMessages,
         journalTitle: journalTitle || 'Untitled',
         onDelta: (chunk) => upsertAssistant(chunk),
-        onDone: () => setIsLoading(false),
+        onDone: () => {
+          // Handle quiz and flashcards generation
+          if (isQuizRequest) {
+            const quizData = parseQuizResponse(assistantContent);
+            if (quizData && onQuizGenerated) {
+              onQuizGenerated(quizData);
+              setMessages((prev) => [
+                ...prev.slice(0, -1), // Remove the last assistant message
+                {
+                  id: id(),
+                  role: "assistant",
+                  content: `Quiz generated! Check your journal to start taking the quiz.`
+                },
+              ]);
+            }
+          } else if (isFlashcardsRequest) {
+            const flashcardsData = parseFlashcardsResponse(assistantContent);
+            if (flashcardsData && onFlashcardsGenerated) {
+              onFlashcardsGenerated(flashcardsData);
+              setMessages((prev) => [
+                ...prev.slice(0, -1), // Remove the last assistant message
+                {
+                  id: id(),
+                  role: "assistant",
+                  content: `Flashcards generated! Check your journal to start studying.`
+                },
+              ]);
+            }
+          }
+          setIsLoading(false);
+        },
         onError: (error) => {
           toast({
             title: "Error",
@@ -336,7 +500,7 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
         </div>
       </ScrollArea>
 
-      <div className="p-3 border-t border-border bg-card">
+      <div className="p-3 bg-card">
         {/* Uploaded Files Display */}
         {uploadedFiles.length > 0 && (
           <div className="mb-3 space-y-2">
@@ -359,6 +523,40 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
             ))}
           </div>
         )}
+
+        {/* Quick Suggestion Buttons */}
+        <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs whitespace-nowrap flex-shrink-0"
+            onClick={() => setDraft("quiz me on ")}
+            disabled={isLoading}
+          >
+            quiz me on
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs whitespace-nowrap flex-shrink-0"
+            onClick={() => setDraft("create flashcards on ")}
+            disabled={isLoading}
+          >
+            create flashcards on
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs whitespace-nowrap flex-shrink-0"
+            onClick={() => setDraft("generate notes on ")}
+            disabled={isLoading}
+          >
+            generate notes on
+          </Button>
+        </div>
 
         <form
           className="flex gap-2"
@@ -405,9 +603,6 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
             <SendHorizontal className="h-4 w-4" />
           </Button>
         </form>
-        <div className="mt-2 text-[11px] text-muted-foreground">
-          Tip: Press Enter to send, Shift+Enter for a new line. Upload files for AI analysis.
-        </div>
       </div>
     </aside>
   );
