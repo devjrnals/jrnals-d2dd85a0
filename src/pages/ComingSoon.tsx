@@ -26,7 +26,8 @@ export default function ComingSoon() {
   const navigate = useNavigate();
 
   const handleAccessSubmit = () => {
-    if (accessPassword === ACCESS_PASSWORD) {
+    const trimmedPassword = accessPassword.trim();
+    if (trimmedPassword === ACCESS_PASSWORD) {
       // Store access granted in sessionStorage
       sessionStorage.setItem("early_access_granted", "true");
       toast({
@@ -34,7 +35,8 @@ export default function ComingSoon() {
         description: "Welcome to Jrnals early access.",
       });
       setShowAccessDialog(false);
-      navigate("/auth");
+      setAccessPassword("");
+      navigate("/landing");
     } else {
       toast({
         title: "Invalid password",
