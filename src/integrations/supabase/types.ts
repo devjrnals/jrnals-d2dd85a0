@@ -80,6 +80,50 @@ export type Database = {
         }
         Relationships: []
       }
+      journal_shares: {
+        Row: {
+          allowed_emails: string[] | null
+          created_at: string
+          created_by: string
+          id: string
+          journal_id: string
+          permission_type: string
+          share_id: string
+          share_type: string
+          updated_at: string
+        }
+        Insert: {
+          allowed_emails?: string[] | null
+          created_at?: string
+          created_by: string
+          id?: string
+          journal_id: string
+          permission_type?: string
+          share_id?: string
+          share_type?: string
+          updated_at?: string
+        }
+        Update: {
+          allowed_emails?: string[] | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          journal_id?: string
+          permission_type?: string
+          share_id?: string
+          share_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_shares_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "journals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journals: {
         Row: {
           content: string | null
@@ -132,6 +176,33 @@ export type Database = {
         Update: {
           last_increment?: string
           metric_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      oauth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          provider: string
+          state_token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          provider?: string
+          state_token?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          provider?: string
+          state_token?: string
           user_id?: string
         }
         Relationships: []
