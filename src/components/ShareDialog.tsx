@@ -60,7 +60,7 @@ export const ShareDialog = ({
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("journal_shares")
         .select("*")
         .eq("journal_id", journalId)
@@ -71,8 +71,8 @@ export const ShareDialog = ({
         console.error("Error loading share:", error);
       } else if (data) {
         setCurrentShare(data);
-        setShareType(data.share_type);
-        setPermissionType(data.permission_type);
+        setShareType(data.share_type as ShareType);
+        setPermissionType(data.permission_type as PermissionType);
         setEmails(data.allowed_emails || []);
       }
 
@@ -138,7 +138,7 @@ export const ShareDialog = ({
 
       if (currentShare) {
         // Update existing share
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("journal_shares")
           .update(shareData)
           .eq("id", currentShare.id);
@@ -146,7 +146,7 @@ export const ShareDialog = ({
         if (error) throw error;
       } else {
         // Create new share
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("journal_shares")
           .insert(shareData);
 

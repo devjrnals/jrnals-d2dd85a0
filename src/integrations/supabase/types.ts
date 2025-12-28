@@ -38,128 +38,12 @@ export type Database = {
         }
         Relationships: []
       }
-      chats: {
-        Row: {
-          created_at: string
-          id: string
-          journal_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          journal_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          journal_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chats_journal_id_fkey"
-            columns: ["journal_id"]
-            isOneToOne: true
-            referencedRelation: "journals"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      chat_messages: {
-        Row: {
-          chat_id: string
-          content: string
-          created_at: string
-          files: Json | null
-          id: string
-          role: string
-          updated_at: string
-        }
-        Insert: {
-          chat_id: string
-          content: string
-          created_at?: string
-          files?: Json | null
-          id?: string
-          role: string
-          updated_at?: string
-        }
-        Update: {
-          chat_id?: string
-          content?: string
-          created_at?: string
-          files?: Json | null
-          id?: string
-          role?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chat_messages_chat_id_fkey"
-            columns: ["chat_id"]
-            isOneToOne: false
-            referencedRelation: "chats"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      journal_shares: {
-        Row: {
-          allowed_emails: string[] | null
-          created_at: string
-          created_by: string
-          id: string
-          journal_id: string
-          permission_type: string
-          share_type: string
-          updated_at: string
-        }
-        Insert: {
-          allowed_emails?: string[] | null
-          created_at?: string
-          created_by: string
-          id?: string
-          journal_id: string
-          permission_type: string
-          share_type: string
-          updated_at?: string
-        }
-        Update: {
-          allowed_emails?: string[] | null
-          created_at?: string
-          created_by?: string
-          id?: string
-          journal_id?: string
-          permission_type?: string
-          share_type?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "journal_shares_journal_id_fkey"
-            columns: ["journal_id"]
-            isOneToOne: false
-            referencedRelation: "journals"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "journal_shares_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       journals: {
         Row: {
           content: string | null
           created_at: string
           folder_id: string | null
           id: string
-          share_id: string | null
           title: string
           updated_at: string
           user_id: string
@@ -169,7 +53,6 @@ export type Database = {
           created_at?: string
           folder_id?: string | null
           id?: string
-          share_id?: string | null
           title?: string
           updated_at?: string
           user_id: string
@@ -179,7 +62,6 @@ export type Database = {
           created_at?: string
           folder_id?: string | null
           id?: string
-          share_id?: string | null
           title?: string
           updated_at?: string
           user_id?: string
@@ -242,7 +124,6 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
-          theme: string | null
           updated_at: string
           user_id: string
         }
@@ -251,7 +132,6 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id: string
-          theme?: string | null
           updated_at?: string
           user_id: string
         }
@@ -260,7 +140,6 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
-          theme?: string | null
           updated_at?: string
           user_id?: string
         }

@@ -94,7 +94,7 @@ export const Home = () => {
         foldersRes = { data: [], error: null };
       } else {
         // Get journals that are shared with this user
-        const { data: sharedData, error: sharedError } = await supabase
+        const { data: sharedData, error: sharedError } = await (supabase as any)
           .from("journal_shares")
           .select(`
             journal_id,
@@ -118,9 +118,9 @@ export const Home = () => {
         } else {
           // Extract journals from the share data
           const sharedJournals = (sharedData || [])
-            .map(share => share.journals)
+            .map((share: any) => share.journals)
             .filter(Boolean)
-            .sort((a, b) => {
+            .sort((a: any, b: any) => {
               const aVal = new Date(a[sortConfig.column]).getTime();
               const bVal = new Date(b[sortConfig.column]).getTime();
               return sortConfig.ascending ? aVal - bVal : bVal - aVal;
