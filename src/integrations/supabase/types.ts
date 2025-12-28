@@ -118,6 +118,24 @@ export type Database = {
           },
         ]
       }
+      metric_tracking: {
+        Row: {
+          last_increment: string
+          metric_type: string
+          user_id: string
+        }
+        Insert: {
+          last_increment?: string
+          metric_type: string
+          user_id: string
+        }
+        Update: {
+          last_increment?: string
+          metric_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
