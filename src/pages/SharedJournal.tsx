@@ -48,62 +48,62 @@ const SharedJournal = () => {
 
     setLoading(true);
     try {
-      // Load journal and its share permissions
-      const { data: journalData, error: journalError } = await supabase
-        .from("journals")
+      // SECURITY: First check if share permissions exist BEFORE loading journal data
+      // This prevents unauthorized access by knowing the journal ID
+      const { data: shareData, error: shareError } = await (supabase as any)
+        .from("journal_shares")
         .select("*")
-        .eq("id", shareId)
+        .eq("share_id", shareId) // Query by share_id, NOT journal_id
         .single();
 
-      if (journalError) {
+      if (shareError || !shareData) {
+        // No share record found - deny access
         toast({
-          title: "Journal not found",
-          description: "This shared journal may have been removed or the link is invalid.",
+          title: "Access denied",
+          description: "This journal is not shared or the link is invalid.",
           variant: "destructive"
         });
         navigate("/");
         return;
       }
 
-      // Check if there are share permissions
-      const { data: shareData, error: shareError } = await (supabase as any)
-        .from("journal_shares")
-        .select("*")
-        .eq("journal_id", shareId)
-        .single();
+      // Store permissions
+      const sharePermissions: SharePermissions = {
+        share_type: shareData.share_type as 'anyone' | 'specific_users',
+        permission_type: shareData.permission_type as 'view' | 'edit',
+        allowed_emails: shareData.allowed_emails || []
+      };
+      setPermissions(sharePermissions);
 
-      if (shareError && shareError.code !== 'PGRST116') {
-        console.error("Error loading share permissions:", shareError);
-      }
-
-      if (shareData) {
-        setPermissions({
-          share_type: shareData.share_type as 'anyone' | 'specific_users',
-          permission_type: shareData.permission_type as 'view' | 'edit',
-          allowed_emails: shareData.allowed_emails || []
-        });
-
-        // Check if access is restricted to specific users
-        if (shareData.share_type === 'specific_users') {
-          // Check if user has already verified their email for this session
-          const verifiedEmail = sessionStorage.getItem(`shared_journal_${shareId}_email`);
-          if (verifiedEmail && shareData.allowed_emails?.includes(verifiedEmail.toLowerCase())) {
-            setEmailVerified(true);
-            setAccessGranted(true);
-          } else {
-            setShowEmailDialog(true);
-            setLoading(false);
-            return;
-          }
-        } else {
-          // Anyone with link can access
+      // Check if access is restricted to specific users
+      if (shareData.share_type === 'specific_users') {
+        // Check if user has already verified their email for this session
+        const verifiedEmail = sessionStorage.getItem(`shared_journal_${shareId}_email`);
+        if (verifiedEmail && shareData.allowed_emails?.includes(verifiedEmail.toLowerCase())) {
+          setEmailVerified(true);
           setAccessGranted(true);
+        } else {
+          setShowEmailDialog(true);
+          setLoading(false);
+          return;
         }
       } else {
-        // No share permissions set - deny access
+        // Anyone with link can access
+        setAccessGranted(true);
+      }
+
+      // Only load journal data AFTER verifying share permissions
+      const journalId = shareData.journal_id;
+      const { data: journalData, error: journalError } = await supabase
+        .from("journals")
+        .select("*")
+        .eq("id", journalId)
+        .single();
+
+      if (journalError) {
         toast({
-          title: "Access denied",
-          description: "This journal is not shared or sharing has been disabled.",
+          title: "Journal not found",
+          description: "This shared journal may have been removed.",
           variant: "destructive"
         });
         navigate("/");
@@ -156,7 +156,9 @@ const SharedJournal = () => {
     setEmailVerified(true);
     setAccessGranted(true);
     setShowEmailDialog(false);
-    setLoading(false);
+    
+    // Reload journal data now that we have permission
+    loadSharedJournal();
 
     toast({
       title: "Access granted",
@@ -370,7 +372,3 @@ const SharedJournal = () => {
 };
 
 export default SharedJournal;
-
-
-
-

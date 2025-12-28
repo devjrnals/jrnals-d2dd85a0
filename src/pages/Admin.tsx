@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, DollarSign, Eye, Mail, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { initializeAdminTables } from "@/lib/initAdminTables";
 
 interface AdminData {
   visitor_count: number;
@@ -32,36 +31,70 @@ const Admin = () => {
   });
   const [emails, setEmails] = useState<ComingSoonEmail[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
-  // Check if user is admin
+  // Check if user has admin role in database
   useEffect(() => {
-    if (!loading && (!user || user.email !== "alishahed798@gmail.com")) {
-      navigate("/dashboard");
-      return;
-    }
+    const checkAdminRole = async () => {
+      if (loading) return;
+      
+      if (!user) {
+        navigate("/auth");
+        return;
+      }
+
+      // Check admin role in user_roles table
+      const { data: roleData, error } = await (supabase as any)
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking admin role:", error);
+        setIsAdmin(false);
+        navigate("/dashboard");
+        return;
+      }
+
+      if (!roleData) {
+        // No admin role found
+        setIsAdmin(false);
+        navigate("/dashboard");
+        return;
+      }
+
+      setIsAdmin(true);
+    };
+
+    checkAdminRole();
   }, [user, loading, navigate]);
 
   const loadAdminData = async () => {
+    if (!isAdmin) return;
+    
     try {
       setLoadingData(true);
 
-      // Try to initialize tables if they don't exist
-      await initializeAdminTables();
-
-      // Load admin metrics
+      // Load admin metrics - RLS will enforce admin-only access
       const { data: adminMetrics, error: metricsError } = await supabase
         .from("admin_data")
         .select("key, value");
 
       if (metricsError) {
         console.error("Error loading admin metrics:", metricsError);
-        // If table doesn't exist, use default values
-        if (metricsError.message?.includes('relation "public.admin_data" does not exist')) {
-          console.log("Admin data table not found - using default values");
+        // If permission denied, show error
+        if (metricsError.message?.includes('row-level security')) {
+          toast({
+            title: "Access Denied",
+            description: "You don't have permission to view admin data",
+            variant: "destructive",
+          });
           setAdminData({ visitor_count: 0, accounts_signed_up: 0, revenue: 0 });
         }
       } else {
-        const newAdminData = { ...adminData };
+        const newAdminData = { visitor_count: 0, accounts_signed_up: 0, revenue: 0 };
         adminMetrics?.forEach((item) => {
           if (item.key === "visitor_count") {
             newAdminData.visitor_count = parseInt(item.value as string) || 0;
@@ -74,7 +107,7 @@ const Admin = () => {
         setAdminData(newAdminData);
       }
 
-      // Load coming soon emails
+      // Load coming soon emails - RLS will enforce admin-only access
       const { data: emailData, error: emailError } = await supabase
         .from("coming_soon_emails")
         .select("*")
@@ -82,17 +115,14 @@ const Admin = () => {
 
       if (emailError) {
         console.error("Error loading emails:", emailError);
-        // If table doesn't exist, show a helpful message instead of error
-        if (emailError.message?.includes('relation "public.coming_soon_emails" does not exist')) {
-          console.log("Coming soon emails table not found - this is expected if migrations haven't been run yet");
-          setEmails([]);
-        } else {
+        if (emailError.message?.includes('row-level security')) {
           toast({
-            title: "Error",
-            description: "Failed to load email data",
+            title: "Access Denied",
+            description: "You don't have permission to view email data",
             variant: "destructive",
           });
         }
+        setEmails([]);
       } else {
         setEmails(emailData || []);
       }
@@ -135,12 +165,24 @@ const Admin = () => {
   };
 
   useEffect(() => {
-    if (user?.email === "alishahed798@gmail.com") {
+    if (isAdmin === true) {
       loadAdminData();
     }
-  }, [user]);
+  }, [isAdmin]);
 
-  if (loading || !user || user.email !== "alishahed798@gmail.com") {
+  // Show loading while checking admin status
+  if (loading || isAdmin === null) {
+    return (
+      <div className="signed-in-theme flex h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-3">
+          <RefreshCw className="h-6 w-6 animate-spin" />
+          <span>Verifying access...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
     return (
       <div className="signed-in-theme flex h-screen items-center justify-center bg-background">
         <div className="text-center">
