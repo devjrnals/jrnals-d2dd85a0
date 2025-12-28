@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { SendHorizontal, Upload } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 type ChatbotSidebarProps = {
   journalTitle?: string;
@@ -36,6 +37,22 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+
+  // Get user session for authentication
+  useEffect(() => {
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setAccessToken(session?.access_token ?? null);
+    };
+    getSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAccessToken(session?.access_token ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const readFileContent = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -123,11 +140,20 @@ export function ChatbotSidebar({ journalTitle, className }: ChatbotSidebarProps)
     onDone: () => void;
     onError: (error: string) => void;
   }) => {
+    // Get fresh access token
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    
+    if (!token) {
+      onError("You must be logged in to use the chatbot");
+      return;
+    }
+
     const resp = await fetch(CHAT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ messages: chatMessages, journalTitle: title }),
     });
