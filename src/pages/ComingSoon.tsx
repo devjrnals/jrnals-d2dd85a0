@@ -1,7 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import landingLogo from "@/assets/landing-logo.png";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
@@ -9,13 +11,38 @@ import { z } from "zod";
 // Email validation schema
 const emailSchema = z.string().trim().email({ message: "Invalid email address" }).max(255, { message: "Email is too long" });
 
+// Access password (for early access)
+const ACCESS_PASSWORD = "access2025";
+
 export default function ComingSoon() {
   // Render on a fixed 16:9 "artboard" and scale to the viewport so spacing + type match the reference image.
   const DESIGN = useMemo(() => ({ w: 1440, h: 810 }), []);
   const [scale, setScale] = useState(1);
   const [email, setEmail] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
+  const [showAccessDialog, setShowAccessDialog] = useState(false);
+  const [accessPassword, setAccessPassword] = useState("");
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const handleAccessSubmit = () => {
+    if (accessPassword === ACCESS_PASSWORD) {
+      // Store access granted in sessionStorage
+      sessionStorage.setItem("early_access_granted", "true");
+      toast({
+        title: "Access granted!",
+        description: "Welcome to Jrnals early access.",
+      });
+      setShowAccessDialog(false);
+      navigate("/auth");
+    } else {
+      toast({
+        title: "Invalid password",
+        description: "Please check your access code and try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleEmailSubmit = async () => {
     // Validate email with zod
@@ -128,9 +155,14 @@ export default function ComingSoon() {
             </div>
 
             <nav className="flex items-center gap-6 text-xs uppercase tracking-[0.2em] text-black/80">
-              <span className="select-none">
-                See what&apos;s happening
-              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowAccessDialog(true)}
+                className="h-8 rounded-none px-3 text-xs uppercase tracking-[0.2em] text-black/80 hover:bg-black/5 hover:text-black border border-black/20"
+              >
+                Access
+              </Button>
               <span className="select-none text-black/60">—</span>
               <button type="button" className="hover:text-black transition-colors">
                 Instagram
@@ -212,6 +244,35 @@ export default function ComingSoon() {
           </div>
         </div>
       </div>
+
+      {/* Access Dialog */}
+      <Dialog open={showAccessDialog} onOpenChange={setShowAccessDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Early Access</DialogTitle>
+            <DialogDescription>
+              Enter your access code to get early access to Jrnals.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <Input
+              type="password"
+              placeholder="Access code"
+              value={accessPassword}
+              onChange={(e) => setAccessPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleAccessSubmit();
+                }
+              }}
+              className="w-full"
+            />
+            <Button onClick={handleAccessSubmit} className="w-full">
+              Submit
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
