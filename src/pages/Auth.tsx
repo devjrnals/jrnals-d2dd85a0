@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,9 @@ const signupSchema = loginSchema.extend({
 });
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [searchParams] = useSearchParams();
+  const modeParam = searchParams.get('mode');
+  const [isLogin, setIsLogin] = useState(modeParam === 'signup' ? false : true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -26,6 +28,16 @@ export default function Auth() {
   const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string }>({});
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Sync isLogin state with URL parameter
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    if (mode === 'signup') {
+      setIsLogin(false);
+    } else if (mode === 'login') {
+      setIsLogin(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -118,18 +130,46 @@ export default function Auth() {
 
   const handleGoogleAuth = async () => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      setLoading(true);
+      
+      // Get the current origin to construct redirect URL
+      const redirectUrl = `${window.location.origin}/auth/callback`;
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Google OAuth error:', error);
+        throw error;
+      }
+
+      // The OAuth flow will redirect the user, so we don't need to do anything else here
+      // The redirect will be handled by the callback route
     } catch (error: any) {
+      console.error('Google authentication error:', error);
+      setLoading(false);
+      
+      let errorMessage = 'Failed to sign in with Google. ';
+      
+      if (error?.message) {
+        errorMessage += error.message;
+      } else if (error?.error_description) {
+        errorMessage += error.error_description;
+      } else {
+        errorMessage += 'Please make sure Google OAuth is properly configured in your Supabase project.';
+      }
+      
       toast({
-        title: "Error",
-        description: error.message,
+        title: "Authentication Error",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -247,6 +287,7 @@ export default function Auth() {
           variant="outline"
           className="w-full"
           onClick={handleGoogleAuth}
+          disabled={loading}
         >
           <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
             <path

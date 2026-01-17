@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { PanelLeftClose } from "lucide-react";
+import { PanelLeftClose, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShareDialog } from "@/components/ShareDialog";
 
@@ -11,7 +11,6 @@ type TopBarProps = {
   onMoveToTrash?: () => void;
   onToggleSidebar?: () => void;
   sidebarCollapsed?: boolean;
-  onShare?: () => void;
 };
 
 export const TopBar = ({
@@ -22,7 +21,6 @@ export const TopBar = ({
   onMoveToTrash,
   onToggleSidebar,
   sidebarCollapsed = false,
-  onShare,
 }: TopBarProps) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(journalTitle);
@@ -68,23 +66,26 @@ export const TopBar = ({
           </div>
 
 
-          <div className="flex items-center gap-2 flex-1 justify-end">
+          {/* Controls - positioned based on sidebar state */}
+          <div className={`flex items-center gap-2 absolute z-20 right-6 transition-transform duration-300 ease-in-out ${sidebarCollapsed ? 'translate-x-0' : '-translate-x-[396px]'}`}>
+            <Button
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setShareDialogOpen(true)}
+            >
+              <Share2 className="w-4 h-4 mr-2" />
+              Share
+            </Button>
             {onToggleSidebar && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-foreground"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={onToggleSidebar}
               >
-                <PanelLeftClose className={`w-5 h-5 transition-transform ${sidebarCollapsed ? 'rotate-180' : ''}`} />
+                <PanelLeftClose className="w-5 h-5" />
               </Button>
             )}
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              onClick={() => setShareDialogOpen(true)}
-            >
-              Share
-            </Button>
           </div>
         </div>
       </div>

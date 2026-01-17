@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,6 +29,29 @@ export function ConfirmDialog({
   onOpenChange,
   onConfirm,
 }: Props) {
+  React.useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      // Find the dialog content element
+      const dialogContent = document.querySelector('[role="alertdialog"]');
+      if (dialogContent && !dialogContent.contains(e.target as Node)) {
+        // Clicked outside the dialog, close it
+        onOpenChange(false);
+      }
+    };
+
+    // Add event listener with a slight delay to avoid immediate close
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open, onOpenChange]);
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>

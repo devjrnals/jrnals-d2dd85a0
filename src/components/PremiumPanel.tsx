@@ -31,13 +31,31 @@ export function PremiumPanel({ open, onClose, onUpgrade }: Props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
 
-  const pricing = useMemo(
-    () => ({
-      annual: { label: "Annual", badge: "Save 50%", price: "$11.99", cadence: "/ month", footnote: "Billed yearly" },
-      monthly: { label: "Monthly", price: "$23.99", cadence: "/ month", footnote: "Billed monthly" },
-    }),
-    [],
-  );
+  const pricing = useMemo(() => {
+    const monthlyPrice = 12;
+    const annualPrice = 96;
+    const monthlyYearly = monthlyPrice * 12; // $144/year
+    const savings = monthlyYearly - annualPrice; // $48
+    const savingsPercentage = Math.round((savings / monthlyYearly) * 100); // 33%
+    
+    return {
+      annual: { 
+        label: "Annual", 
+        badge: `Save ${savingsPercentage}%`, 
+        price: "$96", 
+        cadence: "/ year", 
+        footnote: "Billed yearly ($8/month)",
+        checkoutUrl: "https://buy.stripe.com/28E3cv0xI0hgg539Ry5EY04"
+      },
+      monthly: { 
+        label: "Monthly", 
+        price: "$12", 
+        cadence: "/ month", 
+        footnote: "Billed monthly",
+        checkoutUrl: "https://buy.stripe.com/3cIeVd5S2e867yxfbS5EY00"
+      },
+    };
+  }, []);
 
   if (!open) return null;
 
@@ -52,16 +70,17 @@ export function PremiumPanel({ open, onClose, onUpgrade }: Props) {
       <div
         className={cn(
           "absolute left-1/2 top-1/2 w-[min(520px,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2",
-          "h-[min(620px,calc(100%-2rem))]",
+          "max-h-[min(620px,calc(100%-2rem))]",
           "rounded-2xl border border-border/60 shadow-2xl",
           "bg-background/70 supports-[backdrop-filter]:backdrop-blur-2xl",
           "overflow-hidden",
+          "flex flex-col",
         )}
         role="dialog"
         aria-modal="true"
         aria-label="Upgrade"
       >
-        <div className="relative h-full">
+        <div className="relative flex flex-col h-full">
           <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-primary/18 via-primary/8 to-transparent" />
 
           <div className="relative flex h-full flex-col">
@@ -77,7 +96,7 @@ export function PremiumPanel({ open, onClose, onUpgrade }: Props) {
               </Button>
             </div>
 
-            <div className="flex-1 overflow-auto px-6 pb-6">
+            <div className="flex-1 overflow-auto px-6 pb-4">
               <div className="space-y-6">
                 <div className="rounded-xl border border-border/60 bg-background/40 p-4">
                   <ul className="space-y-3">
@@ -137,14 +156,20 @@ export function PremiumPanel({ open, onClose, onUpgrade }: Props) {
 
                 <Button
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                  onClick={() => onUpgrade?.(interval)}
+                  onClick={() => {
+                    const checkoutUrl = interval === "annual" 
+                      ? pricing.annual.checkoutUrl 
+                      : pricing.monthly.checkoutUrl;
+                    window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+                    onUpgrade?.(interval);
+                  }}
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
                   Upgrade Now
                 </Button>
 
-                <p className="text-center text-xs text-muted-foreground">
-                  Join <span className="font-semibold text-foreground">5,000,000+</span> people working smarter with Jrnals.
+                <p className="text-center text-xs text-muted-foreground mb-0">
+                  Study smarter and faster with Jrnals.
                 </p>
               </div>
             </div>

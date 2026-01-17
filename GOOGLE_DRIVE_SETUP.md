@@ -64,10 +64,12 @@ Go to your Supabase project dashboard:
 2. Add the following secrets:
 
 ```bash
-GOOGLE_CLIENT_ID=1096408826522-qugsq6s37ni23l7kguucdl4s0mh88v17.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=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
+GOOGLE_CLIENT_ID=796017890896-t31g6ss0q0053jlfss3ceimvncab03kh.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=YOUR_CLIENT_SECRET_HERE
 GOOGLE_REDIRECT_URI=http://localhost:8080/google-oauth-callback.html
 ```
+
+**⚠️ Important:** Replace `YOUR_CLIENT_SECRET_HERE` with your actual Google OAuth Client Secret from Google Cloud Console.
 
 **For Production:**
 Update `GOOGLE_REDIRECT_URI` to your production domain.
@@ -100,7 +102,7 @@ VITE_SUPABASE_URL=your_supabase_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # Google Client ID (Frontend only - safe to expose)
-VITE_GOOGLE_CLIENT_ID=1096408826522-qugsq6s37ni23l7kguucdl4s0mh88v17.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=796017890896-t31g6ss0q0053jlfss3ceimvncab03kh.apps.googleusercontent.com
 ```
 
 **⚠️ Important Security Notes:**

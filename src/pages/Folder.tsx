@@ -118,7 +118,14 @@ const FolderPage = () => {
   };
 
   const deleteJournal = async (journalId: string) => {
-    const { error } = await supabase.from("journals").delete().eq("id", journalId);
+    if (!user) return;
+
+    // SECURITY: Verify ownership before deleting
+    const { error } = await supabase
+      .from("journals")
+      .delete()
+      .eq("id", journalId)
+      .eq("user_id", user.id); // Only delete if user owns it
 
     if (error) {
       toast({ title: "Error deleting journal", variant: "destructive" });

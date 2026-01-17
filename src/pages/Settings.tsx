@@ -16,6 +16,7 @@ export default function Settings() {
   const { toast } = useToast();
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -33,12 +34,31 @@ export default function Settings() {
   useEffect(() => {
     if (user) {
       loadProfile();
+    } else {
+      setIsProfileLoading(false);
     }
   }, [user]);
 
   const loadProfile = async () => {
-    if (!user) return;
+    if (!user) {
+      setIsProfileLoading(false);
+      return;
+    }
 
+    // Try to get cached profile data first from localStorage to prevent glitch
+    // This loads synchronously so there's no flash of empty state
+    const cachedProfile = localStorage.getItem(`profile_${user.id}`);
+    if (cachedProfile) {
+      try {
+        const parsed = JSON.parse(cachedProfile);
+        setDisplayName(parsed.display_name || "");
+        setAvatarUrl(parsed.avatar_url || null);
+      } catch (e) {
+        // Ignore cache parse errors, continue to load from DB
+      }
+    }
+
+    // Load fresh data from database
     const { data, error } = await supabase
       .from("profiles")
       .select("display_name, avatar_url")
@@ -47,18 +67,31 @@ export default function Settings() {
 
     if (error) {
       console.error("Error loading profile:", error);
+      setIsProfileLoading(false);
       return;
     }
 
     if (data) {
       setDisplayName(data.display_name || "");
       setAvatarUrl(data.avatar_url);
+      // Cache the profile data for next time
+      localStorage.setItem(`profile_${user.id}`, JSON.stringify({
+        display_name: data.display_name || "",
+        avatar_url: data.avatar_url
+      }));
     }
+    
+    setIsProfileLoading(false);
   };
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -83,42 +116,103 @@ export default function Settings() {
     setIsUploadingAvatar(true);
 
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
 
       console.log('Attempting to upload file:', fileName);
 
-      // Upload to Supabase Storage
+      // Delete old avatar if it exists
+      if (avatarUrl) {
+        try {
+          const oldFileName = avatarUrl.split('/').pop();
+          if (oldFileName) {
+            const oldPath = `${user.id}/${oldFileName}`;
+            await supabase.storage
+              .from('avatars')
+              .remove([oldPath]);
+          }
+        } catch (deleteError) {
+          console.warn('Could not delete old avatar:', deleteError);
+          // Continue with upload even if deletion fails
+        }
+      }
+
+      // Upload to Supabase Storage with upsert option (overwrite if exists)
       const { error: uploadError, data } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          upsert: true,
+          cacheControl: '3600',
+        });
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
+        
+        // Check if bucket exists - if not, provide helpful instructions
+        if (uploadError.message.includes('Bucket not found') || 
+            uploadError.message.includes('not found') ||
+            uploadError.message.includes('does not exist') ||
+            uploadError.statusCode === '404' ||
+            uploadError.message.includes('The resource was not found')) {
+          throw new Error('Storage bucket not configured. The database migration needs to be run. Please contact support or run: supabase migration up');
+        }
+        
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
       console.log('Upload successful:', data);
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      const { data: urlData } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName);
 
+      const publicUrl = urlData.publicUrl;
       console.log('Public URL:', publicUrl);
 
-      // Update profile with new avatar URL
-      const { error: updateError } = await supabase
+      // Ensure profile exists first, then update
+      const { data: existingProfile } = await supabase
         .from("profiles")
-        .update({ avatar_url: publicUrl })
-        .eq("user_id", user.id);
+        .select("user_id")
+        .eq("user_id", user.id)
+        .single();
 
-      if (updateError) {
-        console.error('Profile update error:', updateError);
-        throw new Error(`Profile update failed: ${updateError.message}`);
+      if (!existingProfile) {
+        // Create profile if it doesn't exist
+        const { error: insertError } = await supabase
+          .from("profiles")
+          .insert({
+            id: user.id,
+            user_id: user.id,
+            avatar_url: publicUrl,
+            display_name: displayName || null,
+          });
+
+        if (insertError) {
+          console.error('Profile insert error:', insertError);
+          throw new Error(`Profile creation failed: ${insertError.message}`);
+        }
+      } else {
+        // Update existing profile
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({ avatar_url: publicUrl })
+          .eq("user_id", user.id);
+
+        if (updateError) {
+          console.error('Profile update error:', updateError);
+          throw new Error(`Profile update failed: ${updateError.message}`);
+        }
       }
 
       setAvatarUrl(publicUrl);
+      // Update cache
+      if (user) {
+        localStorage.setItem(`profile_${user.id}`, JSON.stringify({
+          display_name: displayName || "",
+          avatar_url: publicUrl
+        }));
+      }
       toast({
         title: "Success",
         description: "Profile picture updated successfully!",
@@ -129,16 +223,16 @@ export default function Settings() {
       // Provide more specific error messages
       let errorMessage = "Failed to upload profile picture. Please try again.";
       if (error instanceof Error) {
-        if (error.message.includes('Bucket not found') || error.message.includes('not found')) {
-          errorMessage = "Storage not configured. Please run database migrations first.";
-        } else if (error.message.includes('Permission denied') || error.message.includes('access')) {
+        if (error.message.includes('Bucket not found') || error.message.includes('not configured')) {
+          errorMessage = "Storage not configured. Please contact support.";
+        } else if (error.message.includes('Permission denied') || error.message.includes('access') || error.message.includes('policy')) {
           errorMessage = "Permission denied. Please check your account permissions.";
         } else if (error.message.includes('File too large')) {
           errorMessage = "File is too large. Please choose a smaller image.";
         } else if (error.message.includes('already exists')) {
           errorMessage = "A file with this name already exists. Please try again.";
         } else {
-          errorMessage = `Upload failed: ${error.message}`;
+          errorMessage = error.message || "Failed to upload profile picture. Please try again.";
         }
       }
 
@@ -172,6 +266,13 @@ export default function Settings() {
       return;
     }
 
+    // Update cache
+    if (user) {
+      localStorage.setItem(`profile_${user.id}`, JSON.stringify({
+        display_name: displayName,
+        avatar_url: avatarUrl
+      }));
+    }
     toast({
       title: "Success",
       description: "Profile updated successfully!",
