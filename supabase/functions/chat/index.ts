@@ -41,7 +41,12 @@ serve(async (req) => {
 
     console.log('Authenticated user:', user.id);
 
-    const { messages, journalTitle, enableWebSearch = false, journalId, isCiteCommand = false, isFactCheckCommand = false } = await req.json();
+    const requestBody = await req.json();
+    const { messages, journalTitle, enableWebSearch = false, journalId, isCiteCommand = false, citeStyle = '', citeContent = '', isFactCheckCommand = false, researchEnabled = false } = requestBody;
+    
+    // #region agent log
+    console.log('[DEBUG] Received request body:', JSON.stringify({ researchEnabled, isCiteCommand, citeStyle, citeContent, messagesCount: messages?.length || 0, hasMessages: !!messages }));
+    // #endregion
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 
     if (!openAIApiKey) {
@@ -52,24 +57,8 @@ serve(async (req) => {
     console.log('Processing chat request for user', user.id, 'with', messages.length, 'messages');
 
     // Define OpenAI function schemas for agentic workflow
-    const tools = [
-      {
-        type: "function",
-        function: {
-          name: "search_web",
-          description: "Search the web for information using Tavily search. Use this when you need current information, facts, or data that isn't in the provided context.",
-          parameters: {
-            type: "object",
-            properties: {
-              query: {
-                type: "string",
-                description: "The search query to find information on the web"
-              }
-            },
-            required: ["query"]
-          }
-        }
-      },
+    // Only include search_web tool when research is enabled
+    const tools: any[] = [
       {
         type: "function",
         function: {
@@ -118,6 +107,27 @@ serve(async (req) => {
       }
     ];
 
+    // Only add search_web tool when research is enabled
+    if (researchEnabled) {
+      tools.unshift({
+        type: "function",
+        function: {
+          name: "search_web",
+          description: "Search the web for information using Tavily search. Use this when you need current information, facts, or data that isn't in the provided context.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: {
+                type: "string",
+                description: "The search query to find information on the web"
+              }
+            },
+            required: ["query"]
+          }
+        }
+      });
+    }
+
     // Web search function using Tavily MCP endpoint
     async function searchWeb(query: string, controller?: ReadableStreamDefaultController, isCiteCmd?: boolean, isFactCheckCmd?: boolean): Promise<{ context: string; sources: Array<{ title: string; url: string }> }> {
       // Send status update for web search
@@ -130,8 +140,8 @@ serve(async (req) => {
           sendStatusUpdate("Searched the web", controller);
         }
       }
-      // Try environment variable first, fallback to hardcoded key
-      const tavilyApiKey = Deno.env.get('TAVILY_API_KEY') || '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';
+      // Get Tavily API key from environment variables only - no hardcoded fallback
+      const tavilyApiKey = Deno.env.get('TAVILY_API_KEY');
       if (!tavilyApiKey) {
         console.warn('TAVILY_API_KEY not found, web search disabled');
         return { context: '', sources: [] };
@@ -474,6 +484,235 @@ serve(async (req) => {
       }
     };
 
+    // Tavily Research API functions
+    // Get Tavily API key from environment variables only - no hardcoded fallback
+    const tavilyApiKey = Deno.env.get('TAVILY_API_KEY');
+
+    async function startTavilyResearch(query: string): Promise<string> {
+      // #region agent log
+      console.log('[DEBUG] Starting Tavily research with query:', query);
+      // #endregion
+      const response = await fetch('https://api.tavily.com/research', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${tavilyApiKey}`,
+        },
+        body: JSON.stringify({
+          input: query,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        // #region agent log
+        console.log('[DEBUG] Tavily research start failed:', response.status, errorText);
+        // #endregion
+        throw new Error(`Tavily Research API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      // #region agent log
+      console.log('[DEBUG] Tavily research started, request_id:', data.request_id);
+      // #endregion
+      return data.request_id;
+    }
+
+    async function pollTavilyResearch(requestId: string, controller: ReadableStreamDefaultController, startTime?: number): Promise<{ content: string; sources: Array<{ title: string; url: string; icon?: string; logo?: string; favicon?: string }>; reasoningTrace?: any; answer?: string; rawResponse?: any }> {
+      const maxAttempts = 30; // 30 attempts * 2 seconds = 60 seconds max
+      let attempts = 0;
+      const encoder = new TextEncoder();
+      const researchStartTime = startTime || Date.now();
+
+      // Helper to format elapsed time
+      const formatElapsedTime = (elapsedMs: number): string => {
+        const seconds = Math.floor(elapsedMs / 1000);
+        if (seconds < 60) {
+          return `${seconds}s`;
+        }
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}m ${remainingSeconds}s`;
+      };
+
+      while (attempts < maxAttempts) {
+        // #region agent log
+        console.log('[DEBUG] Polling Tavily research, attempt:', attempts + 1, 'requestId:', requestId);
+        // #endregion
+        const response = await fetch(`https://api.tavily.com/research/${requestId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${tavilyApiKey}`,
+          },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          // #region agent log
+          console.error('[DEBUG] Tavily polling failed:', response.status, errorText);
+          // #endregion
+          throw new Error(`Tavily Research polling error: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        // #region agent log
+        console.log('[DEBUG] Tavily polling response keys:', Object.keys(data));
+        console.log('[DEBUG] Tavily status:', data.status, 'attempt:', attempts + 1, '/', maxAttempts);
+        console.log('[DEBUG] Full Tavily response:', JSON.stringify(data, null, 2).substring(0, 1000));
+        // #endregion
+        const status = data.status;
+
+        if (status === 'completed') {
+          // Format sources with all metadata (icons, logos, etc.)
+          const sources: Array<{ title: string; url: string; icon?: string; logo?: string; favicon?: string }> = [];
+          if (data.sources && Array.isArray(data.sources)) {
+            for (const source of data.sources) {
+              if (source.url) {
+                sources.push({
+                  title: source.title || source.url,
+                  url: source.url,
+                  icon: source.icon,
+                  logo: source.logo,
+                  favicon: source.favicon,
+                });
+              }
+            }
+          }
+
+          return {
+            content: data.content || '',
+            sources: sources,
+            reasoningTrace: data.reasoning_trace || data.reasoningTrace || null,
+            answer: data.answer || null,
+            rawResponse: data, // Include full response for inspection
+          };
+        } else if (status === 'failed') {
+          throw new Error('Tavily research task failed');
+        } else if (status === 'pending' || status === 'in_progress') {
+          // Calculate elapsed time
+          const elapsed = Date.now() - researchStartTime;
+          const elapsedStr = formatElapsedTime(elapsed);
+          
+          // Update status
+          if (attempts === 0) {
+            sendStatusUpdate(`Starting research... (${elapsedStr})`, controller);
+          } else {
+            sendStatusUpdate(`Research in progress... (${elapsedStr})`, controller);
+          }
+          
+          // Wait 2 seconds before next poll
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          attempts++;
+        } else {
+          throw new Error(`Unknown research status: ${status}`);
+        }
+      }
+
+      throw new Error('Tavily research polling timeout after 60 seconds');
+    }
+
+    async function handleResearchMode(query: string, controller: ReadableStreamDefaultController) {
+      const encoder = new TextEncoder();
+      const startTime = Date.now();
+      // #region agent log
+      console.log('[DEBUG] handleResearchMode called with query:', query);
+      // #endregion
+      try {
+        sendStatusUpdate('Starting research...', controller);
+
+        // Start research task
+        const requestId = await startTavilyResearch(query);
+        // #region agent log
+        console.log('[DEBUG] Research task started, requestId:', requestId);
+        // #endregion
+
+        // Poll for results (pass startTime to track elapsed time)
+        const result = await pollTavilyResearch(requestId, controller, startTime);
+
+        // Calculate total elapsed time
+        const totalElapsed = Date.now() - startTime;
+        const formatElapsedTime = (elapsedMs: number): string => {
+          const seconds = Math.floor(elapsedMs / 1000);
+          if (seconds < 60) {
+            return `${seconds}s`;
+          }
+          const minutes = Math.floor(seconds / 60);
+          const remainingSeconds = seconds % 60;
+          return `${minutes}m ${remainingSeconds}s`;
+        };
+        const elapsedStr = formatElapsedTime(totalElapsed);
+        sendStatusUpdate(`Research completed (${elapsedStr})`, controller);
+
+        // #region agent log
+        console.log('[DEBUG] Research result structure:', { 
+          hasContent: !!result.content, 
+          contentLength: result.content?.length,
+          sourcesCount: result.sources?.length,
+          hasReasoningTrace: !!result.reasoningTrace,
+          reasoningTraceKeys: result.reasoningTrace ? Object.keys(result.reasoningTrace) : null
+        });
+        // #endregion
+
+        // Format research report - use answer if available, otherwise content
+        let report = '# Research Report\n\n';
+        const reportContent = result.answer || result.content || 'No content available.';
+        report += reportContent;
+
+        // Add reasoning trace if available (shows research steps)
+        if (result.reasoningTrace) {
+          report += '\n\n## Research Process\n\n';
+          if (result.reasoningTrace.steps && Array.isArray(result.reasoningTrace.steps)) {
+            result.reasoningTrace.steps.forEach((step: any, index: number) => {
+              report += `### Step ${index + 1}: ${step.name || 'Research Step'}\n\n`;
+              if (step.description) report += `${step.description}\n\n`;
+              if (step.duration) report += `*Duration: ${step.duration}*\n\n`;
+            });
+          }
+        }
+
+        // Add sources section with icons/logos if available
+        if (result.sources && result.sources.length > 0) {
+          report += '\n\n## Sources\n\n';
+          result.sources.forEach((source, index) => {
+            const iconMarkdown = source.icon || source.logo || source.favicon ? ` ![${source.title}](${source.icon || source.logo || source.favicon})` : '';
+            report += `${index + 1}.${iconMarkdown} [${source.title}](${source.url})\n`;
+          });
+        }
+
+        // Stream the report content in chunks
+        const chunkSize = 50;
+        let index = 0;
+        
+        while (index < report.length) {
+          const chunk = report.slice(index, index + chunkSize);
+          const data = JSON.stringify({
+            choices: [{
+              delta: { content: chunk },
+              finish_reason: index + chunkSize >= report.length ? 'stop' : null
+            }]
+          });
+          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          index += chunkSize;
+        }
+
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      } catch (error) {
+        // #region agent log
+        console.error('[DEBUG] Research mode error:', error);
+        console.error('[DEBUG] Error details:', error instanceof Error ? { message: error.message, stack: error.stack } : error);
+        // #endregion
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        const errorData = JSON.stringify({
+          error: `Research failed: ${errorMessage}`
+        });
+        controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      }
+    }
+
     // Update system prompt for agentic workflow
     let systemPrompt = `You are a helpful AI assistant for a journal/note-taking application. The user is currently working on a journal titled "${journalTitle || 'Untitled'}". 
 
@@ -500,30 +739,36 @@ When generating content for journal insertion, use proper markdown formatting wi
 
     // Modify system prompt for cite command
     if (isCiteCommand) {
-      const lastUserMessage = messages[messages.length - 1]?.content || '';
-      const linkMatch = lastUserMessage.match(/\/cite\s+(.+)/i);
-      const link = linkMatch ? linkMatch[1].trim() : '';
+      const citationStyleName = citeStyle || 'APA';
+      const citationContent = citeContent || '';
       
-      systemPrompt = `You are a helpful AI assistant. The user wants to cite a link or video: ${link}
+      systemPrompt = `You are a helpful AI assistant specialized in academic citations. The user wants to cite: ${citationContent}
+
+Citation Style: ${citationStyleName}
 
 Your task is to:
-1. Search the web for information about this link/video to get metadata (title, author, publication date, etc.)
-2. Generate citations in THREE formats: APA, MLA, and Chicago
-3. Present all three citation formats clearly in your response
+1. Search the web for information about this source (link, book, article, etc.) to get accurate metadata (title, author, publication date, publisher, URL, etc.)
+2. Generate citations in ${citationStyleName} format
+3. Provide BOTH:
+   - Reference list entry (full citation for bibliography/reference list)
+   - In-text citation (for use within the body of the text)
 
 Format your response as:
-## Citations for [Title]
+## ${citationStyleName} Citation
 
-### APA Format
-[APA citation here]
+### Reference List Entry
+[Full citation formatted according to ${citationStyleName} style for the reference list/bibliography]
 
-### MLA Format
-[MLA citation here]
+### In-Text Citation
+[In-text citation formatted according to ${citationStyleName} style for use within paragraphs]
 
-### Chicago Format
-[Chicago citation here]
+### Notes
+- If this is a website, include the URL and access date
+- If this is a book, include publisher and place of publication
+- If this is a journal article, include volume, issue, and page numbers
+- Follow ${citationStyleName} style guidelines precisely
 
-Use the search_web tool to find accurate metadata about the link.`;
+Use the search_web tool to find accurate metadata about the source.`;
     }
 
     // Modify system prompt for fact-check command
@@ -569,6 +814,33 @@ Use the analyze_file tool if files are uploaded, and use search_web extensively 
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          // #region agent log
+          console.log('[DEBUG] Stream start - researchEnabled:', researchEnabled);
+          // #endregion
+          // Handle research mode - if enabled, skip regular chat flow
+          if (researchEnabled) {
+            // #region agent log
+            console.log('[DEBUG] Research mode enabled - entering research handler');
+            // #endregion
+            const lastMessage = messages[messages.length - 1];
+            const query = lastMessage?.content || '';
+            // #region agent log
+            console.log('[DEBUG] Research query:', query);
+            // #endregion
+            if (query.trim()) {
+              await handleResearchMode(query, controller);
+              return;
+            } else {
+              // #region agent log
+              console.log('[DEBUG] Research mode but no query provided');
+              // #endregion
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'No query provided for research' })}\n\n`));
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+              return;
+            }
+          }
+
           // Send initial "Thinking..." status
           if (isCiteCommand || isFactCheckCommand) {
             sendStatusUpdate("Thinking...", controller);
@@ -584,21 +856,27 @@ Use the analyze_file tool if files are uploaded, and use search_web extensively 
           toolRound++;
           console.log(`Tool execution round ${toolRound}`);
 
-          // Call OpenAI with tools
+          // Call OpenAI with tools (only if researchEnabled or tools available)
+          const requestBody: any = {
+            model: 'gpt-4o',
+            messages: conversationMessages,
+            max_tokens: 1500,
+            temperature: 0.7,
+          };
+          
+          // Only include tools if research is enabled (tools array will include search_web)
+          if (researchEnabled && tools.length > 0) {
+            requestBody.tools = tools;
+            requestBody.tool_choice = 'auto'; // Let AI decide when to use tools
+          }
+          
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-              messages: conversationMessages,
-              tools: tools,
-              tool_choice: 'auto', // Let AI decide when to use tools
-        max_tokens: 1500,
-        temperature: 0.7,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

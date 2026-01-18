@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { z } from "zod";
+
+// Google Identity Services types
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: { client_id: string; callback: (response: CredentialResponse) => void }) => void;
+          renderButton: (element: HTMLElement, config: { theme?: string; size?: string; text?: string; width?: string }) => void;
+          prompt: () => void;
+          disableAutoSelect: () => void;
+        };
+      };
+    };
+  }
+}
+
+interface CredentialResponse {
+  credential: string;
+  select_by: string;
+}
 
 const loginSchema = z.object({
   email: z.string().trim().email({ message: "Invalid email address" }).max(255),
@@ -26,8 +48,13 @@ export default function Auth() {
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; displayName?: string }>({});
+  const [showSetupDialog, setShowSetupDialog] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  
+  // Google Client ID - use existing one from codebase or environment variable
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "796017890896-t31g6ss0q0053jlfss3ceimvncab03kh.apps.googleusercontent.com";
 
   // Sync isLogin state with URL parameter
   useEffect(() => {
@@ -41,7 +68,9 @@ export default function Auth() {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
+      console.log('Auth state changed:', event, session ? 'Has session' : 'No session');
+      if (session && event === 'SIGNED_IN') {
+        // Navigate to dashboard on sign in (handles both email and Google auth)
         navigate("/dashboard");
       }
     });
@@ -85,13 +114,38 @@ export default function Auth() {
 
         if (error) throw error;
 
+        // Wait a moment for session to be established
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Verify session was created
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          throw new Error(sessionError.message || 'Failed to establish session');
+        }
+
+        if (!session) {
+          // Try once more after a delay
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const { data: { session: retrySession }, error: retryError } = await supabase.auth.getSession();
+          
+          if (retryError || !retrySession) {
+            throw new Error('Session was not created. Please try again.');
+          }
+        }
+
         toast({
           title: "Welcome back!",
           description: "You've successfully logged in.",
         });
+
+        // Navigate to dashboard
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 100);
       } else {
         const validatedData = result.data as z.infer<typeof signupSchema>;
-        const { error } = await supabase.auth.signUp({
+        const { data: signUpData, error } = await supabase.auth.signUp({
           email: validatedData.email,
           password: validatedData.password,
           options: {
@@ -112,10 +166,27 @@ export default function Auth() {
           console.log('Account tracking not available yet:', error.message);
         }
 
-        toast({
-          title: "Account created!",
-          description: "You've successfully signed up.",
-        });
+        // Check if session was created (email confirmation may be disabled)
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session) {
+          // Email confirmation is disabled, user is signed in
+          toast({
+            title: "Account created!",
+            description: "You've successfully signed up.",
+          });
+
+          // Navigate to dashboard
+          setTimeout(() => {
+            navigate("/dashboard");
+          }, 100);
+        } else {
+          // Email confirmation is required
+          toast({
+            title: "Account created!",
+            description: "Please check your email to confirm your account before signing in.",
+          });
+        }
       }
     } catch (error: any) {
       toast({
@@ -128,57 +199,161 @@ export default function Auth() {
     }
   };
 
-  const handleGoogleAuth = async () => {
+  // Handle Google Identity Services credential response
+  const handleCredentialResponse = useCallback(async (response: CredentialResponse) => {
     try {
       setLoading(true);
+      console.log('GSI credential received, starting authentication...');
       
-      // Get the current origin to construct redirect URL
-      const redirectUrl = `${window.location.origin}/auth/callback`;
+      const { credential } = response; // This is the Google ID token
       
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      if (!credential) {
+        throw new Error('No credential received from Google');
+      }
+
+      console.log('Sending ID token to Supabase...');
+      const { data, error } = await supabase.auth.signInWithIdToken({
         provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
+        token: credential,
       });
 
       if (error) {
-        console.error('Google OAuth error:', error);
+        console.error('Google authentication error:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        
+        // Check for specific error codes and provide helpful messages
+        if (error.code === 'provider_disabled' || error.message?.includes('not enabled')) {
+          // Set flag to show setup dialog instead of just throwing
+          setShowSetupDialog(true);
+          setLoading(false);
+          return;
+        }
+        
         throw error;
       }
 
-      // The OAuth flow will redirect the user, so we don't need to do anything else here
-      // The redirect will be handled by the callback route
+      console.log('Authentication response:', data);
+
+      // Wait a moment for session to be established
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Verify session was created
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error after sign-in:', sessionError);
+        throw new Error(sessionError.message || 'Failed to establish session');
+      }
+
+      if (!session) {
+        // Try once more after a delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const { data: { session: retrySession }, error: retryError } = await supabase.auth.getSession();
+        
+        if (retryError || !retrySession) {
+          throw new Error('Session was not created. Please try again.');
+        }
+        
+        console.log('Session created on retry');
+      } else {
+        console.log('Session created successfully');
+      }
+
+      // Success - redirect to dashboard
+      toast({
+        title: "Success!",
+        description: "You've successfully signed in with Google.",
+      });
+      
+      // Use a small delay before navigation to ensure state is updated
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 100);
     } catch (error: any) {
       console.error('Google authentication error:', error);
       setLoading(false);
       
+      // Provider disabled errors are handled above with the dialog
+      if (error?.code === 'provider_disabled' || error?.message?.includes('not enabled')) {
+        setShowSetupDialog(true);
+        return;
+      }
+      
       let errorMessage = 'Failed to sign in with Google. ';
+      let errorTitle = "Authentication Error";
       
       if (error?.message) {
         errorMessage += error.message;
       } else if (error?.error_description) {
         errorMessage += error.error_description;
       } else {
-        errorMessage += 'Please make sure Google OAuth is properly configured in your Supabase project.';
+        errorMessage += 'Please try again or contact support if the problem persists.';
       }
       
       toast({
-        title: "Authentication Error",
+        title: errorTitle,
         description: errorMessage,
         variant: "destructive",
       });
     }
-  };
+  }, [navigate, toast]);
+
+  // Initialize Google Identity Services
+  useEffect(() => {
+    const initializeGSI = () => {
+      if (typeof window.google !== 'undefined' && window.google.accounts && googleButtonRef.current) {
+        try {
+          // Clear any existing button
+          if (googleButtonRef.current.hasChildNodes()) {
+            googleButtonRef.current.innerHTML = '';
+          }
+
+          window.google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleCredentialResponse,
+          });
+
+          // Disable One Tap auto-select for now (can enable later if desired)
+          window.google.accounts.id.disableAutoSelect();
+
+          // Render the button
+          if (googleButtonRef.current) {
+            window.google.accounts.id.renderButton(googleButtonRef.current, {
+              theme: 'outline',
+              size: 'large',
+              text: 'signin_with',
+              width: '100%',
+            });
+          }
+        } catch (error) {
+          console.error('Error initializing Google Identity Services:', error);
+        }
+      }
+    };
+
+    // Wait for GSI script to load
+    if (typeof window.google !== 'undefined') {
+      initializeGSI();
+    } else {
+      // Retry when script loads
+      const checkInterval = setInterval(() => {
+        if (typeof window.google !== 'undefined') {
+          clearInterval(checkInterval);
+          initializeGSI();
+        }
+      }, 100);
+
+      // Cleanup after 10 seconds
+      setTimeout(() => clearInterval(checkInterval), 10000);
+      
+      return () => clearInterval(checkInterval);
+    }
+  }, [GOOGLE_CLIENT_ID, handleCredentialResponse]);
 
   return (
     // Auth should always render in light mode, regardless of the last-used app theme.
     <div
-      className="flex min-h-screen items-center justify-center bg-white text-gray-900"
+      className="relative flex min-h-screen items-center justify-center bg-white text-gray-900"
       style={{
         "--background": "0 0% 100%",
         "--foreground": "222.2 84% 4.9%",
@@ -202,7 +377,11 @@ export default function Auth() {
         "--radius": "0.5rem",
       } as React.CSSProperties}
     >
-      <div className="w-full max-w-md p-8 space-y-6 bg-card rounded-lg border border-border">
+      {/* Logo in top left */}
+      <div className="absolute top-6 left-6">
+        <img src="/logo.png" alt="Jrnals" className="h-8 w-auto" loading="eager" />
+      </div>
+      <div className="w-full max-w-md p-8 space-y-6 bg-card rounded-lg">
         <div className="space-y-2 text-center">
           <h1 className="text-3xl font-bold">
             {isLogin ? "Welcome back" : "Create account"}
@@ -266,7 +445,7 @@ export default function Auth() {
             )}
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full bg-[#030303] hover:bg-[#030303]/90 text-white" disabled={loading}>
             {loading ? "Loading..." : isLogin ? "Sign in" : "Sign up"}
           </Button>
         </form>
@@ -282,39 +461,18 @@ export default function Auth() {
           </div>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={handleGoogleAuth}
-          disabled={loading}
-        >
-          <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-            <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              fill="#EA4335"
-            />
-          </svg>
-          Continue with Google
-        </Button>
+        {/* Google Identity Services Button Container */}
+        <div 
+          ref={googleButtonRef} 
+          className="w-full flex justify-center"
+          style={{ minHeight: '40px' }}
+        />
 
         <div className="text-center">
           <button
             type="button"
             onClick={() => setIsLogin(!isLogin)}
-            className="text-sm text-primary hover:underline"
+            className="text-sm text-[#030303] hover:underline"
           >
             {isLogin
               ? "Don't have an account? Sign up"
@@ -322,6 +480,27 @@ export default function Auth() {
           </button>
         </div>
       </div>
+
+      {/* Google Provider Setup Dialog */}
+      <Dialog open={showSetupDialog} onOpenChange={setShowSetupDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Google Provider Not Enabled</DialogTitle>
+            <DialogDescription>
+              Google authentication is not enabled in your Supabase project. Please enable it in Authentication &gt; Providers &gt; Google.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowSetupDialog(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

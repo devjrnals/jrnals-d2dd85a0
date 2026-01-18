@@ -287,12 +287,29 @@ All colors MUST be HSL.
   }
 
   /* Thinking animation - moving white highlight */
-  @keyframes thinking-highlight {
-    0% {
-      left: -60%;
+  @keyframes thinking-glow {
+    0%, 100% {
+      text-shadow: 0 0 5px rgba(156, 163, 175, 0.5),
+                   0 0 10px rgba(156, 163, 175, 0.3),
+                   0 0 15px rgba(156, 163, 175, 0.2);
     }
-    100% {
-      left: 160%;
+    50% {
+      text-shadow: 0 0 10px rgba(156, 163, 175, 0.8),
+                   0 0 20px rgba(156, 163, 175, 0.5),
+                   0 0 30px rgba(156, 163, 175, 0.3);
+    }
+  }
+
+  @keyframes thinking-glow-dark {
+    0%, 100% {
+      text-shadow: 0 0 5px rgba(243, 250, 249, 0.5),
+                   0 0 10px rgba(243, 250, 249, 0.3),
+                   0 0 15px rgba(243, 250, 249, 0.2);
+    }
+    50% {
+      text-shadow: 0 0 10px rgba(243, 250, 249, 0.8),
+                   0 0 20px rgba(243, 250, 249, 0.5),
+                   0 0 30px rgba(243, 250, 249, 0.3);
     }
   }
 
@@ -300,27 +317,39 @@ All colors MUST be HSL.
     position: relative;
     display: inline-block;
     color: #4a4a4a; /* dark grey base */
-    overflow: hidden;
+    animation: thinking-glow 2s ease-in-out infinite;
   }
 
-  .thinking-text::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -60%;
-    width: 40%;
-    height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.4) 40%,
-      rgba(255, 255, 255, 0.6) 50%,
-      rgba(255, 255, 255, 0.4) 60%,
-      transparent 100%
-    );
-    mix-blend-mode: screen;
-    animation: thinking-highlight 2.5s ease-in-out infinite;
-    pointer-events: none;
-    will-change: left;
+  .dark .thinking-text {
+    color: #F3FAF9; /* light text for dark mode */
+    animation: thinking-glow-dark 2s ease-in-out infinite;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes blink {
+    0%, 50% {
+      opacity: 1;
+    }
+    51%, 100% {
+      opacity: 0.3;
+    }
+  }
+
+  .collaborator-cursor {
+    animation: blink 1s infinite;
+  }
+
+  .collaborator-cursor:hover > div {
+    opacity: 1 !important;
   }
 }

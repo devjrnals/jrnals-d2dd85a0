@@ -5,7 +5,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { usePricingDialog } from "@/contexts/PricingDialogContext";
 import { useEffect, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FileText, Sparkles, Brain, Search, Star, Quote, PackageSearch, Code2, Telescope, Share2, RefreshCw, Paperclip, Eye, Globe, ArrowUp, MessageSquare, Pen, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileText, Sparkles, Brain, Search, Star, Quote, PackageSearch, Code2, Telescope, Share2, RefreshCw, Paperclip, Eye, Globe, ArrowUp, MessageSquare, Pen, ArrowRight, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -67,9 +67,9 @@ const ImageCarousel = () => {
   const [isVisible, setIsVisible] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
   const images = [
-    { id: 1, placeholder: "Image 1" },
-    { id: 2, placeholder: "Image 2" },
-    { id: 3, placeholder: "Image 3" },
+    { id: 1, src: "/carousel/gif1.gif", type: "gif", alt: "Carousel GIF 1" },
+    { id: 2, src: "/carousel/gif2.gif", type: "gif", alt: "Carousel GIF 2" },
+    { id: 3, src: "/carousel/img1.png", type: "image", alt: "Carousel Image 1" },
   ];
   const duration = 8000; // 8 seconds per image
 
@@ -183,7 +183,21 @@ const ImageCarousel = () => {
       {/* Image Container */}
       <div className="relative rounded-xl shadow-2xl overflow-hidden bg-white">
         <div className="aspect-video bg-gray-100 flex items-center justify-center relative">
-          <div className="text-gray-400 text-lg">{images[currentIndex].placeholder}</div>
+          <img
+            src={images[currentIndex].src}
+            alt={images[currentIndex].alt}
+            className="w-full h-full object-contain"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+              const parent = target.parentElement;
+              if (parent) {
+                parent.innerHTML = `
+                  <div class="text-gray-400 text-lg">Image not found: ${images[currentIndex].src}</div>
+                `;
+              }
+            }}
+          />
           
           {/* Progress Bar */}
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
@@ -390,7 +404,7 @@ const AnimatedWord = ({ words }: { words: readonly string[] }) => {
 export const Landing = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [showWelcomeDialog, setShowWelcomeDialog] = useState(true);
+  const [showWelcomeDialog, setShowWelcomeDialog] = useState(false);
   const [videoOpacity, setVideoOpacity] = useState({ video1: 1, video2: 0 });
   const [whiteOverlayOpacity, setWhiteOverlayOpacity] = useState(0);
   const video1Ref = useRef<HTMLVideoElement>(null);
@@ -497,8 +511,17 @@ export const Landing = () => {
     };
   }, []);
 
+  // Check if popup has been shown before
+  useEffect(() => {
+    const hasSeenWelcome = localStorage.getItem('hasSeenWelcomeDialog');
+    if (!hasSeenWelcome) {
+      setShowWelcomeDialog(true);
+    }
+  }, []);
+
   const handleWelcomeClose = () => {
     setShowWelcomeDialog(false);
+    localStorage.setItem('hasSeenWelcomeDialog', 'true');
   };
   // Scroll to top on mount
   useEffect(() => {
@@ -560,8 +583,8 @@ export const Landing = () => {
       <Dialog open={showWelcomeDialog} onOpenChange={handleWelcomeClose}>
         <DialogContent className="max-w-3xl w-full p-0 gap-0 overflow-hidden rounded-2xl border-0 shadow-2xl bg-white [&>button]:hidden">
           <div className="flex relative">
-            {/* Left Section - Text Content (2/3 width) */}
-            <div className="flex-1 p-12 flex flex-col justify-between" style={{ width: '66.666%' }}>
+            {/* Left Section - Text Content (full width) */}
+            <div className="flex-1 p-12 flex flex-col justify-between w-full">
               <div className="space-y-6">
                 <h1 className="text-4xl font-medium text-gray-900">Welcome to Jrnals</h1>
                 <p className="text-lg text-gray-900">
@@ -602,15 +625,6 @@ export const Landing = () => {
                 Let's Go
                 <ArrowRight className="h-4 w-4" />
               </Button>
-            </div>
-            
-            {/* Right Section - Placeholder Image (1/3 width) */}
-            <div className="relative overflow-hidden" style={{ width: '33.333%' }}>
-              <div className="h-full w-full flex items-center justify-center bg-gray-100">
-                <div className="text-gray-400 text-sm">Placeholder</div>
-              </div>
-              {/* Border that cuts the image in half from the right */}
-              <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-white shadow-lg" />
             </div>
           </div>
         </DialogContent>
@@ -690,12 +704,14 @@ export const Landing = () => {
           <div className="container px-8 text-center pointer-events-auto">
             <p className="text-lg md:text-xl text-gray-600 mb-4">Context for Education</p>
             
-            <h1 className="font-medium text-foreground mb-8 max-w-5xl mx-auto whitespace-nowrap" style={{ fontFamily: "'Grotesk S SH Bold', sans-serif", minHeight: '4rem' }}>
+            <h1 className="font-medium text-foreground mb-2 max-w-5xl mx-auto whitespace-nowrap" style={{ fontFamily: "'Grotesk S SH Bold', sans-serif", minHeight: '4rem' }}>
               <span className="inline-flex items-baseline text-5xl md:text-6xl lg:text-7xl gap-0" style={{ gap: 0 }}>
                 <AnimatedWord words={ANIMATED_WORDS} />
                 <span className="text-foreground whitespace-nowrap">&nbsp;with your notes</span>
               </span>
             </h1>
+            
+            <p className="text-sm text-gray-500 mb-8">Optimized for Desktop</p>
 
             <div className="flex justify-center">
               <Button size="lg" onClick={() => navigate("/auth")} className="bg-foreground text-background hover:bg-foreground/90 rounded-full">
@@ -710,6 +726,165 @@ export const Landing = () => {
       <section id="first-learning-section" className="container px-8 py-20">
         <ImageCarousel />
       </section>
+
+      {/* Feature Cards Section */}
+      <FadeInSection className="w-full py-16">
+        <div className="w-full">
+          <div 
+            className="flex overflow-x-auto pb-4 px-8"
+            style={{
+              gap: '100px',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#d1d5db transparent'
+            }}
+          >
+            {[
+              {
+                title: "/quiz",
+                description: "Instantly generates exam-style questions from your notes and topics.",
+                borderColor: "border-red-500"
+              },
+              {
+                title: "/flashcards",
+                description: "Turns any content into smart spaced-repetition flashcards.",
+                borderColor: "border-yellow-500"
+              },
+              {
+                title: "/calculator",
+                description: "Adds a Desmos calculator into the journal and graphs equations.",
+                borderColor: "border-pink-500"
+              },
+              {
+                title: "/fact-check",
+                description: "Verifies statements using reliable sources and flags inaccuracies.",
+                borderColor: "border-blue-500"
+              },
+              {
+                title: "/mark",
+                description: "Grades responses using rubric-style feedback and improvement tips.",
+                borderColor: "border-purple-500"
+              },
+              {
+                title: "/plan",
+                description: "Builds a structured plan based on the coursework.",
+                borderColor: "border-green-500"
+              }
+            ].map((feature, index) => {
+              const isTopRight = index % 2 === 1; // Odd indices have container at top right
+              return (
+                <div key={index} className="flex flex-col max-w-xl w-full flex-shrink-0">
+                  {isTopRight && (
+                    /* Title and Description Container - Positioned at top */
+                    <div className="relative z-0 bg-gray-100 rounded-2xl py-4 mb-[-20px]" style={{ maxWidth: '320px', width: '100%', marginLeft: 'auto', marginRight: '0', transform: 'translateX(80px)' }}>
+                      <div className="px-3">
+                        <h3 className="text-3xl md:text-4xl font-semibold text-gray-900 mb-3 leading-tight">
+                          {feature.title}
+                        </h3>
+                        <p className="text-base text-gray-600 leading-relaxed">
+                          {feature.description}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Image Placeholder Container */}
+                  <div className={`relative z-10 rounded-2xl bg-white overflow-hidden ${isTopRight ? 'mt-0' : 'mb-[-50px]'}`} style={{ aspectRatio: '16/10', width: '100%' }}>
+                    {feature.title === '/calculator' ? (
+                      <img 
+                        src="/features/calc-ss.png" 
+                        alt="Calculator feature screenshot" 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to placeholder if image doesn't exist
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `
+                              <div class="w-full h-full flex items-center justify-center bg-gray-100">
+                                <div class="text-center text-gray-400">
+                                  <div class="text-xs font-medium mb-2">${feature.title} Feature</div>
+                                  <div class="text-[10px]">Screenshot placeholder</div>
+                                </div>
+                              </div>
+                            `;
+                          }
+                        }}
+                      />
+                    ) : feature.title === '/flashcards' ? (
+                      <img 
+                        src="/features/flashcard-ss.png" 
+                        alt="Flashcards feature screenshot" 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to placeholder if image doesn't exist
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `
+                              <div class="w-full h-full flex items-center justify-center bg-gray-100">
+                                <div class="text-center text-gray-400">
+                                  <div class="text-xs font-medium mb-2">${feature.title} Feature</div>
+                                  <div class="text-[10px]">Screenshot placeholder</div>
+                                </div>
+                              </div>
+                            `;
+                          }
+                        }}
+                      />
+                    ) : feature.title === '/quiz' ? (
+                      <img 
+                        src="/features/quiz-ss.png" 
+                        alt="Quiz feature screenshot" 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to placeholder if image doesn't exist
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `
+                              <div class="w-full h-full flex items-center justify-center bg-gray-100">
+                                <div class="text-center text-gray-400">
+                                  <div class="text-xs font-medium mb-2">${feature.title} Feature</div>
+                                  <div class="text-[10px]">Screenshot placeholder</div>
+                                </div>
+                              </div>
+                            `;
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                        <div className="text-center text-gray-400">
+                          <div className="text-xs font-medium mb-2">{feature.title} Feature</div>
+                          <div className="text-[10px]">Screenshot placeholder</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {!isTopRight && (
+                    /* Title and Description Container - Positioned below */
+                    <div className="relative z-0 pt-[70px] bg-gray-100 rounded-2xl py-4" style={{ maxWidth: '320px', width: '100%', marginLeft: 'auto', marginRight: '0', transform: 'translateX(80px)' }}>
+                      <div className="px-3">
+                        <h3 className="text-3xl md:text-4xl font-semibold text-gray-900 mb-3 leading-tight">
+                          {feature.title}
+                        </h3>
+                        <p className="text-base text-gray-600 leading-relaxed">
+                          {feature.description}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </FadeInSection>
 
       {/* Reviews Section */}
       <FadeInSection className="w-full py-16">
@@ -745,6 +920,50 @@ export const Landing = () => {
         </div>
       </FadeInSection>
 
+      {/* FAQ Section */}
+      <FadeInSection className="w-full py-16">
+        <div className="container px-8 max-w-3xl mx-auto">
+          <p className="text-4xl md:text-5xl font-medium text-gray-900 text-center mb-12">
+            Frequently Asked Questions
+          </p>
+          <Accordion type="single" collapsible className="w-full space-y-0">
+            {[
+              {
+                question: "How does Jrnals help with my studies?",
+                answer: "Jrnals combines AI-powered assistance with your personal notes to help you learn faster, organize better, and understand concepts more deeply. It acts as a tutor that knows your entire learning context."
+              },
+              {
+                question: "Can I use Jrnals on mobile devices?",
+                answer: "Jrnals is currently optimized for desktop use. We're working on mobile support and will announce it when available. For the best experience, we recommend using Jrnals on your computer or laptop."
+              },
+              {
+                question: "Is my data secure and private?",
+                answer: "Yes, your data security and privacy are our top priorities. All your notes and journals are encrypted and stored securely. We never share your content with third parties, and you have full control over your data."
+              },
+              {
+                question: "Do I need to pay to use Jrnals?",
+                answer: "Jrnals offers both free and premium plans. The free plan includes core features, while premium plans unlock advanced AI capabilities, unlimited journals, and priority support."
+              },
+              {
+                question: "How do I get started with Jrnals?",
+                answer: "Simply sign up for a free account and start creating your first journal. You can import existing notes, create new content, and begin using AI assistance right away. Our interface is designed to be intuitive and easy to use."
+              }
+            ].map((faq, index) => (
+              <AccordionItem key={index} value={`item-${index}`} className="border-b border-gray-200">
+                <AccordionTrigger className="py-6 hover:no-underline group [&>svg]:hidden">
+                  <span className="text-lg font-semibold text-gray-900 pr-4 text-left flex-1">
+                    {faq.question}
+                  </span>
+                  <Plus className="h-5 w-5 text-gray-600 flex-shrink-0 group-data-[state=open]:hidden transition-all" />
+                </AccordionTrigger>
+                <AccordionContent className="pb-6 text-gray-600 leading-relaxed">
+                  {faq.answer}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </div>
+      </FadeInSection>
 
       <SiteFooter />
 

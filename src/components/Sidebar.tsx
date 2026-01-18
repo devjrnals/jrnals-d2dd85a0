@@ -70,8 +70,7 @@ export const Sidebar = ({ onLoadComplete }: SidebarProps) => {
       Promise.all([
         loadJournals(),
         loadFolders(),
-        loadDisplayName(),
-        loadAvatar()
+        loadDisplayName()
       ]).finally(() => {
         setIsLoading(false);
         // Call callback after a small delay to ensure state is updated
@@ -166,9 +165,38 @@ export const Sidebar = ({ onLoadComplete }: SidebarProps) => {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          setAvatarUrl(payload.new.avatar_url || null);
+          const newAvatarUrl = payload.new.avatar_url || null;
+          
+          // Update avatar if provided
+          setAvatarUrl(newAvatarUrl);
+          
+          // Update display name if provided
           if (payload.new.display_name !== undefined) {
             setDisplayName(payload.new.display_name || "");
+          }
+          
+          // Update localStorage cache when profile changes
+          if (user) {
+            // Read current cache to preserve display_name if not in payload
+            const currentCache = localStorage.getItem(`profile_${user.id}`);
+            let currentDisplayName = "";
+            
+            if (currentCache) {
+              try {
+                const parsed = JSON.parse(currentCache);
+                currentDisplayName = parsed.display_name || "";
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+            
+            // Merge payload changes with existing cache
+            const updatedCache = {
+              display_name: payload.new.display_name !== undefined ? (payload.new.display_name || "") : currentDisplayName,
+              avatar_url: newAvatarUrl
+            };
+            
+            localStorage.setItem(`profile_${user.id}`, JSON.stringify(updatedCache));
           }
         }
       )
@@ -231,14 +259,40 @@ export const Sidebar = ({ onLoadComplete }: SidebarProps) => {
   const loadDisplayName = async () => {
     if (!user) return;
 
+    // Try to get cached profile data first from localStorage to prevent glitch
+    // This loads synchronously so there's no flash of empty state
+    const cachedProfile = localStorage.getItem(`profile_${user.id}`);
+    if (cachedProfile) {
+      try {
+        const parsed = JSON.parse(cachedProfile);
+        setDisplayName(parsed.display_name || "");
+        setAvatarUrl(parsed.avatar_url || null);
+      } catch (e) {
+        // Ignore cache parse errors, continue to load from DB
+      }
+    }
+
+    // Load fresh data from database
     const { data: profile } = await supabase
       .from("profiles")
       .select("display_name, avatar_url")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    setDisplayName(profile?.display_name || "");
-    setAvatarUrl(profile?.avatar_url || null);
+    if (profile) {
+      setDisplayName(profile.display_name || "");
+      setAvatarUrl(profile.avatar_url || null);
+      // Cache the profile data for next time
+      localStorage.setItem(`profile_${user.id}`, JSON.stringify({
+        display_name: profile.display_name || "",
+        avatar_url: profile.avatar_url
+      }));
+    } else {
+      // No profile found - clear cache if exists
+      localStorage.removeItem(`profile_${user.id}`);
+      setDisplayName("");
+      setAvatarUrl(null);
+    }
   };
 
   const loadAvatar = async () => {

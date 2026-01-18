@@ -7,6 +7,7 @@ interface LinkTextareaProps {
   onKeyDown?: (e: React.KeyboardEvent) => void;
   disabled?: boolean;
   className?: string;
+  slashCommands?: string[];
 }
 
 export function LinkTextarea({
@@ -15,13 +16,17 @@ export function LinkTextarea({
   placeholder,
   onKeyDown,
   disabled,
-  className = ""
+  className = "",
+  slashCommands = []
 }: LinkTextareaProps) {
   const contentEditableRef = useRef<HTMLDivElement>(null);
   const [isComposing, setIsComposing] = useState(false);
 
   // URL regex pattern
   const urlRegex = /(https?:\/\/[^\s\)\]\>\"\'\,]+)/gi;
+  
+  // Slash command regex pattern - matches /command followed by space or end of string
+  const slashCommandRegex = /\/([a-z-]+)(?=\s|$)/gi;
 
   // Update contentEditable when value prop changes (but not during user typing)
   useEffect(() => {
@@ -92,42 +97,103 @@ export function LinkTextarea({
       return;
     }
 
-    // Split text by URLs and create text nodes and link elements
-    const parts: Array<{ type: 'text' | 'link'; content: string }> = [];
-    let lastIndex = 0;
-    let match;
+    // Find all matches (URLs and slash commands) with their positions
+    type Match = { type: 'url' | 'command'; start: number; end: number; content: string; command?: string };
+    const matches: Match[] = [];
 
+    // Find URLs
     urlRegex.lastIndex = 0;
+    let match;
     while ((match = urlRegex.exec(text)) !== null) {
-      // Add text before URL
-      if (match.index > lastIndex) {
-        parts.push({
-          type: 'text',
-          content: text.substring(lastIndex, match.index)
-        });
-      }
-
-      // Add URL
       let url = match[1].trim();
       url = url.replace(/[.,;!?]+$/, '');
       url = url.replace(/[\)\]\>\"\']+$/, '');
-
+      
       try {
         new URL(url); // Validate URL
-        parts.push({
-          type: 'link',
+        matches.push({
+          type: 'url',
+          start: match.index,
+          end: match.index + match[1].length,
           content: url
         });
-        lastIndex = match.index + match[1].length;
       } catch {
-        // Invalid URL, treat as text
-        parts.push({
-          type: 'text',
-          content: match[1]
-        });
-        lastIndex = match.index + match[1].length;
+        // Invalid URL, skip
       }
     }
+
+    // Find slash commands
+    if (slashCommands.length > 0) {
+      slashCommandRegex.lastIndex = 0;
+      while ((match = slashCommandRegex.exec(text)) !== null) {
+        const commandName = match[1];
+        const fullCommand = match[0]; // includes the leading /
+        
+        // Check if this command is in the valid commands list
+        if (slashCommands.includes(commandName)) {
+          matches.push({
+            type: 'command',
+            start: match.index,
+            end: match.index + fullCommand.length,
+            content: fullCommand,
+            command: commandName
+          });
+        }
+      }
+    }
+
+    // Sort matches by start position
+    matches.sort((a, b) => a.start - b.start);
+
+    // Remove overlapping matches (prefer URLs over commands if they overlap)
+    const filteredMatches: Match[] = [];
+    for (let i = 0; i < matches.length; i++) {
+      const current = matches[i];
+      let overlaps = false;
+      
+      for (let j = 0; j < filteredMatches.length; j++) {
+        const existing = filteredMatches[j];
+        // Check if current overlaps with existing
+        if (!(current.end <= existing.start || current.start >= existing.end)) {
+          overlaps = true;
+          // If current is a URL and existing is a command, replace it
+          if (current.type === 'url' && existing.type === 'command') {
+            filteredMatches[j] = current;
+          }
+          break;
+        }
+      }
+      
+      if (!overlaps) {
+        filteredMatches.push(current);
+      }
+    }
+
+    // Re-sort after filtering
+    filteredMatches.sort((a, b) => a.start - b.start);
+
+    // Build parts array
+    const parts: Array<{ type: 'text' | 'link' | 'command'; content: string; command?: string }> = [];
+    let lastIndex = 0;
+
+    filteredMatches.forEach((match) => {
+      // Add text before match
+      if (match.start > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: text.substring(lastIndex, match.start)
+        });
+      }
+
+      // Add match
+      parts.push({
+        type: match.type === 'url' ? 'link' : 'command',
+        content: match.content,
+        command: match.command
+      });
+
+      lastIndex = match.end;
+    });
 
     // Add remaining text
     if (lastIndex < text.length) {
@@ -137,7 +203,7 @@ export function LinkTextarea({
       });
     }
 
-    // If no URLs found, just add the text
+    // If no matches found, just add the text
     if (parts.length === 0) {
       parts.push({ type: 'text', content: text });
     }
@@ -185,6 +251,12 @@ export function LinkTextarea({
           const textNode = document.createTextNode(part.content);
           contentEditableRef.current.appendChild(textNode);
         }
+      } else if (part.type === 'command') {
+        // Highlight slash commands in purple
+        const commandSpan = document.createElement('span');
+        commandSpan.className = 'text-purple-600 dark:text-purple-400';
+        commandSpan.textContent = part.content;
+        contentEditableRef.current.appendChild(commandSpan);
       } else {
         // Handle newlines in text
         const lines = part.content.split('\n');

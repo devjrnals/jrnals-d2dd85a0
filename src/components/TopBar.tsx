@@ -66,8 +66,8 @@ export const TopBar = ({
           </div>
 
 
-          {/* Controls - positioned based on sidebar state */}
-          <div className={`flex items-center gap-2 absolute z-20 right-6 transition-transform duration-300 ease-in-out ${sidebarCollapsed ? 'translate-x-0' : '-translate-x-[396px]'}`}>
+          {/* Controls - always positioned at the right edge */}
+          <div className="flex items-center gap-2 absolute z-20 right-6">
             <Button
               variant="ghost"
               className="text-muted-foreground hover:text-foreground"

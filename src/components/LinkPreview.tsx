@@ -18,28 +18,8 @@ export function LinkPreview({ url, children }: LinkPreviewProps) {
   useEffect(() => {
     if (showPreview && !previewData) {
       setLoading(true);
-      
-      // Try to fetch preview using linkpreview API if key is available
-      const apiKey = import.meta.env.VITE_LINKPREVIEW_API_KEY;
-      if (apiKey && apiKey !== 'demo') {
-        fetch(`https://api.linkpreview.net/?key=${apiKey}&q=${encodeURIComponent(url)}`)
-          .then(res => res.json())
-          .then(data => {
-            setPreviewData({
-              title: data.title || new URL(url).hostname,
-              description: data.description || '',
-              image: data.image
-            });
-            setLoading(false);
-          })
-          .catch(() => {
-            // Fallback to simple preview
-            createSimplePreview();
-          });
-      } else {
-        // No API key, use simple preview
-        createSimplePreview();
-      }
+      // Always use simple preview - API keys should not be exposed in frontend
+      createSimplePreview();
     }
     
     function createSimplePreview() {

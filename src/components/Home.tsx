@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
-import { Folder, FileText, Check, Edit, Trash2, ChevronDown, Plus, ArrowUp, List, Grid, X, MoreVertical, Pin } from "lucide-react";
+import { Folder, FileText, Check, Edit, Trash2, ChevronDown, Plus, ArrowUp, List, Grid, X, MoreVertical, Pin, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { extractTextFromFile } from "@/utils/documentExtractor";
 import { LinkInput } from "@/components/LinkInput";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Journal = {
   id: string;
@@ -61,6 +63,9 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
   const [inputValue, setInputValue] = useState("");
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; content: string; type: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
+  const [journalSearchQuery, setJournalSearchQuery] = useState("");
+  const [selectedJournalIds, setSelectedJournalIds] = useState<Set<string>>(new Set());
 
 
   // Store onLoadComplete in ref to prevent unnecessary re-renders
@@ -187,11 +192,6 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
           details: journalsRes.error.details,
           hint: journalsRes.error.hint
         });
-      } else {
-        console.log("Loaded owned journals:", journalsRes.data?.length || 0, "journals");
-        if (journalsRes.data && journalsRes.data.length > 0) {
-          console.log("Sample journal:", journalsRes.data[0]);
-        }
       }
 
       // Get journal counts for folders
@@ -231,7 +231,6 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
     } else {
       // Sort journals: pinned first, then by sort order
       const journalsData = journalsRes.data || [];
-      console.log("Loaded journals count:", journalsData.length, "for filter:", activeFilter);
       const sortedJournals = journalsData.sort((a, b) => {
         // Pinned journals always come first (if pinned column exists)
         const aPinned = (a as any).pinned || false;
@@ -281,6 +280,52 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
     if (hour < 17) return "Good afternoon";
     return "Good evening";
   }, []);
+
+  // Filter journals based on search query
+  const filteredJournals = useMemo(() => {
+    if (!journalSearchQuery.trim()) {
+      return journals;
+    }
+    const query = journalSearchQuery.toLowerCase();
+    return journals.filter(journal =>
+      journal.title.toLowerCase().includes(query)
+    );
+  }, [journals, journalSearchQuery]);
+
+  // Get selected journal objects
+  const selectedJournals = useMemo(() => {
+    return journals.filter(journal => selectedJournalIds.has(journal.id));
+  }, [journals, selectedJournalIds]);
+
+  // Handle journal selection
+  const handleJournalSelect = (journal: Journal) => {
+    const isSelected = selectedJournalIds.has(journal.id);
+    const newSelectedIds = new Set(selectedJournalIds);
+    
+    if (isSelected) {
+      // Deselect: remove from set (don't modify input value)
+      newSelectedIds.delete(journal.id);
+      setSelectedJournalIds(newSelectedIds);
+    } else {
+      // Select: add to set (don't modify input value)
+      newSelectedIds.add(journal.id);
+      setSelectedJournalIds(newSelectedIds);
+    }
+  };
+
+  // Sync selected journals when input is cleared externally
+  useEffect(() => {
+    if (!inputValue.trim()) {
+      setSelectedJournalIds(new Set());
+    }
+  }, [inputValue]);
+
+  // Reset search when dropdown closes
+  useEffect(() => {
+    if (!isContextDropdownOpen) {
+      setJournalSearchQuery("");
+    }
+  }, [isContextDropdownOpen]);
 
   const resolvedName = useMemo(() => {
     return displayName ||
@@ -816,7 +861,97 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
               </div>
             )}
 
-            <div className="flex items-center bg-sidebar-accent dark:bg-[#333333] rounded-full border-0 shadow-sm px-4 py-3 focus-within:outline-none">
+            <div className="flex flex-col bg-sidebar-accent dark:bg-[#333333] rounded-2xl border-0 shadow-sm px-4 py-3 focus-within:outline-none min-h-[80px]">
+              {/* @ Add context button and selected journal chips - positioned above plus icon */}
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <DropdownMenu open={isContextDropdownOpen} onOpenChange={setIsContextDropdownOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <button 
+                      className="flex items-center justify-center h-8 px-3 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-[#F3FAF9] hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm font-medium whitespace-nowrap"
+                      title="Add context"
+                    >
+                      @ Add context
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent 
+                    className="w-80 p-0" 
+                    align="start"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                    {/* Search input */}
+                    <div className="p-2 border-b">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search journals..."
+                          value={journalSearchQuery}
+                          onChange={(e) => setJournalSearchQuery(e.target.value)}
+                          className="pl-8"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    {/* Journal list */}
+                    <ScrollArea className="max-h-[300px]">
+                      {filteredJournals.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-muted-foreground">
+                          {journalSearchQuery.trim() ? "No journals found" : "No journals available"}
+                        </div>
+                      ) : (
+                        <div className="p-1">
+                          {filteredJournals.map((journal) => {
+                            const isSelected = selectedJournalIds.has(journal.id);
+                            return (
+                              <DropdownMenuItem
+                                key={journal.id}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleJournalSelect(journal);
+                                }}
+                                className="flex items-center gap-2 cursor-pointer"
+                                onSelect={(e) => e.preventDefault()}
+                              >
+                                <div className="flex items-center justify-center w-4 h-4">
+                                  {isSelected && (
+                                    <Check className="h-4 w-4 text-primary" />
+                                  )}
+                                </div>
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                <span className="flex-1 truncate">{journal.title}</span>
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Selected journal chips */}
+                {selectedJournals.map((journal) => (
+                  <div
+                    key={journal.id}
+                    className="flex items-center gap-1.5 h-8 px-3 pr-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-[#F3FAF9] text-sm font-medium whitespace-nowrap"
+                  >
+                    <span>{journal.title}</span>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleJournalSelect(journal);
+                      }}
+                      className="flex items-center justify-center w-4 h-4 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      aria-label={`Remove ${journal.title}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Input row with plus icon and input field */}
+              <div className="flex items-center flex-1">
               {/* Plus Icon - File Upload */}
               <input
                 ref={fileInputRef}
@@ -844,7 +979,7 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
                     handleCreateJournalWithMessage();
                   }
                 }}
-                className="bg-transparent text-sidebar-accent-foreground dark:text-[#F3FAF9] placeholder:text-muted-foreground dark:placeholder:text-[#F3FAF9]/60 text-base focus:outline-none focus:ring-0"
+                  className="bg-transparent text-sidebar-accent-foreground dark:text-[#F3FAF9] placeholder:text-muted-foreground dark:placeholder:text-[#F3FAF9]/60 text-base focus:outline-none focus:ring-0 flex-1"
               />
 
               {/* Enter Button (upward arrow) */}
@@ -854,6 +989,7 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
                 className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 <ArrowUp className="w-5 h-5" />
               </button>
+              </div>
             </div>
           </div>
         </div>

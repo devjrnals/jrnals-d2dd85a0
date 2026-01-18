@@ -2,8 +2,10 @@
 import { Button } from "@/components/ui/button";
 import { CommandMenu } from "./CommandMenu";
 import { FormattingToolbar, saveSelectionForToolbar } from "./FormattingToolbar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { GripVertical, X, Edit, ChevronRight, ChevronDown, Copy, AlertCircle, Quote, Trash2, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -196,9 +198,30 @@ function SlashCommandMenu({
   onSelect: (command: SlashCommand) => void;
   onClose: () => void;
 }) {
+  const [displayedFilter, setDisplayedFilter] = useState(filter);
+  const filterTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Gradual filtering animation - update displayed filter with slight delay
+  useEffect(() => {
+    if (filterTimeoutRef.current) {
+      clearTimeout(filterTimeoutRef.current);
+    }
+    
+    // Small delay for smooth filtering animation
+    filterTimeoutRef.current = setTimeout(() => {
+      setDisplayedFilter(filter);
+    }, 50);
+
+    return () => {
+      if (filterTimeoutRef.current) {
+        clearTimeout(filterTimeoutRef.current);
+      }
+    };
+  }, [filter]);
+
   const filteredCommands = SLASH_COMMANDS.filter(cmd =>
-    cmd.command.toLowerCase().includes(filter.toLowerCase()) ||
-    cmd.label.toLowerCase().includes(filter.toLowerCase())
+    cmd.command.toLowerCase().includes(displayedFilter.toLowerCase()) ||
+    cmd.label.toLowerCase().includes(displayedFilter.toLowerCase())
   );
 
   // Hide menu if user is typing topic after /quiz or /flashcards
@@ -207,17 +230,16 @@ function SlashCommandMenu({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle Escape - don't prevent Enter here, let the Editor handle it
       if (e.key === 'Escape') {
         onClose();
-      } else if (e.key === 'Enter' && filteredCommands.length > 0) {
-        e.preventDefault();
-        onSelect(filteredCommands[0]);
       }
+      // Note: Enter key handling is done in the Editor's onKeyDown to allow normal typing
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [filteredCommands, onSelect, onClose]);
+  }, [onClose]);
 
   if (filteredCommands.length === 0) return null;
 
@@ -230,7 +252,8 @@ function SlashCommandMenu({
         {filteredCommands.map((cmd, index) => (
           <button
             key={cmd.command}
-            className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
+            className="relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground transition-opacity duration-200"
+            style={{ animation: `fadeIn 0.2s ease-in ${index * 0.03}s both` }}
             onClick={() => onSelect(cmd)}
           >
             <div className="mr-2 flex h-4 w-4 items-center justify-center">
@@ -572,14 +595,21 @@ function DesmosCalculator({
   const containerRef = useRef<HTMLDivElement>(null);
   const calculatorRef = useRef<any>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const onStateChangeRef = useRef(onStateChange);
 
   const initialStateRef = useRef<string | undefined>(calculatorState);
+
+  // Update callback ref when prop changes (without re-initializing calculator)
+  useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
 
   // Update initial state ref when calculatorState prop changes (for external updates)
   useEffect(() => {
     initialStateRef.current = calculatorState;
   }, [calculatorState]);
 
+  // Initialize calculator only once on mount
   useEffect(() => {
     if (containerRef.current && typeof (window as any).Desmos !== 'undefined') {
       const Desmos = (window as any).Desmos;
@@ -597,7 +627,7 @@ function DesmosCalculator({
 
       // Listen for changes and save state
       const handleChange = () => {
-        if (calculatorRef.current && onStateChange) {
+        if (calculatorRef.current && onStateChangeRef.current) {
           // Debounce saves to avoid too frequent updates
           if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
@@ -607,7 +637,7 @@ function DesmosCalculator({
             try {
               const state = calculatorRef.current.getState();
               const stateString = JSON.stringify(state);
-              onStateChange(stateString);
+              onStateChangeRef.current?.(stateString);
             } catch (error) {
               console.error('Failed to save calculator state:', error);
             }
@@ -626,7 +656,8 @@ function DesmosCalculator({
         }
       };
     }
-  }, [onStateChange]); // Only depend on onStateChange, not calculatorState
+    // Empty dependency array - only initialize once on mount
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle resize to update calculator dimensions
   useEffect(() => {
@@ -650,7 +681,7 @@ function DesmosCalculator({
       ref={containerRef}
       data-desmos-calculator="true"
       style={{ width: '100%', height: `${height}px` }}
-      className="overflow-hidden bg-white"
+      className="overflow-hidden bg-white rounded-2xl"
     />
   );
 }
@@ -849,6 +880,46 @@ export const Editor = ({
   const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
   const [content, setContent] = useState(initialContent);
   const [isUpdatingBlockType, setIsUpdatingBlockType] = useState(false);
+  
+  // Comments state - stores comments with their positions
+  type Comment = {
+    id: string;
+    blockId: string;
+    commentText: string;
+    startOffset: number;
+    endOffset: number;
+  };
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [hoveredCommentId, setHoveredCommentId] = useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [commentEditorText, setCommentEditorText] = useState<string>('');
+  const commentEditorRef = useRef<HTMLDivElement>(null);
+
+  // Collaborative cursors state
+  type CollaboratorCursor = {
+    userId: string;
+    userName: string;
+    color: string;
+    blockId: string | null;
+    position: { x: number; y: number } | null;
+    hoveredBlockId: string | null;
+  };
+  const [collaboratorCursors, setCollaboratorCursors] = useState<Map<string, CollaboratorCursor>>(new Map());
+  const [myCursorColor, setMyCursorColor] = useState<string>('');
+  const presenceChannelRef = useRef<any>(null);
+  const cursorUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Color palette for collaborators (distinct colors)
+  const COLLABORATOR_COLORS = [
+    '#3b82f6', // blue-500
+    '#ef4444', // red-500
+    '#10b981', // green-500
+    '#f59e0b', // amber-500
+    '#8b5cf6', // violet-500
+    '#ec4899', // pink-500
+    '#06b6d4', // cyan-500
+    '#84cc16', // lime-500
+  ];
 
   // Formatting toolbar state
   const [formattingToolbar, setFormattingToolbar] = useState<{
@@ -872,6 +943,7 @@ export const Editor = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Parse quiz response from API
   const parseQuizResponse = useCallback((response: string): QuizData | null => {
@@ -1472,7 +1544,6 @@ Content: ${content}`;
 
   // Add quiz block when currentQuiz is provided
   useEffect(() => {
-    console.log('Editor: currentQuiz changed:', currentQuiz);
     if (currentQuiz) {
       // Generate a unique ID using timestamp and random number to avoid duplicates
       const uniqueId = `quiz-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -1495,7 +1566,6 @@ Content: ${content}`;
 
   // Add flashcards block when currentFlashcards is provided
   useEffect(() => {
-    console.log('Editor: currentFlashcards changed:', currentFlashcards);
     if (currentFlashcards) {
       // Generate a unique ID using timestamp and random number to avoid duplicates
       const uniqueId = `flashcards-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -1520,6 +1590,167 @@ Content: ${content}`;
     }
   }, [currentFlashcards, onFlashcardsAdded]);
 
+  // Set up collaborative cursors with Supabase Presence
+  useEffect(() => {
+    if (!journalId || !user) return;
+
+    // Generate a stable color for this user based on their ID
+    const getUserColor = (userId: string): string => {
+      let hash = 0;
+      for (let i = 0; i < userId.length; i++) {
+        hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const index = Math.abs(hash) % COLLABORATOR_COLORS.length;
+      return COLLABORATOR_COLORS[index];
+    };
+
+    const myColor = getUserColor(user.id);
+    setMyCursorColor(myColor);
+
+    // Get user name/email for display
+    const getUserName = (): string => {
+      if (user.user_metadata?.full_name) return user.user_metadata.full_name;
+      if (user.user_metadata?.name) return user.user_metadata.name;
+      if (user.email) return user.email.split('@')[0];
+      return 'Anonymous';
+    };
+
+    const userName = getUserName();
+
+    // Set up presence channel for this journal
+    const channelName = `journal:${journalId}`;
+    const channel = supabase.channel(channelName, {
+      config: {
+        presence: {
+          key: user.id,
+        },
+      },
+    });
+
+    // Track cursor position and broadcast it
+    const updateMyCursor = (blockId: string | null, position: { x: number; y: number } | null) => {
+      channel.track({
+        userId: user.id,
+        userName: userName,
+        color: myColor,
+        blockId: blockId,
+        position: position,
+        lastSeen: new Date().toISOString(),
+      });
+    };
+
+    // Listen for other users' presence updates
+    channel.on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState();
+      const cursors = new Map<string, CollaboratorCursor>();
+      
+      Object.entries(state).forEach(([userId, presences]) => {
+        if (Array.isArray(presences)) {
+          presences.forEach((presence: any) => {
+            // Skip our own cursor
+            if (presence.userId === user.id) return;
+            
+            // Get the most recent presence for this user
+            const existing = cursors.get(userId);
+            if (!existing || (presence.lastSeen && presence.lastSeen > (existing as any).lastSeen)) {
+              cursors.set(userId, {
+                userId: presence.userId || userId,
+                userName: presence.userName || 'Anonymous',
+                color: presence.color || COLLABORATOR_COLORS[0],
+                blockId: presence.blockId || null,
+                position: presence.position || null,
+                hoveredBlockId: null,
+              });
+            }
+          });
+        }
+      });
+      
+      setCollaboratorCursors(cursors);
+    });
+
+    // Subscribe to the channel
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        // Initial presence sync
+        updateMyCursor(null, null);
+      }
+    });
+
+    presenceChannelRef.current = channel;
+
+    // Track cursor movement on mouse move over editor blocks
+    const handleMouseMove = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const blockElement = target.closest('[data-block-id]') as HTMLElement;
+      
+      if (blockElement && blockElement.hasAttribute('contenteditable')) {
+        const blockId = blockElement.getAttribute('data-block-id');
+        const rect = blockElement.getBoundingClientRect();
+        const position = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        };
+
+        // Throttle cursor updates (update every 100ms)
+        if (cursorUpdateTimeoutRef.current) {
+          clearTimeout(cursorUpdateTimeoutRef.current);
+        }
+        cursorUpdateTimeoutRef.current = setTimeout(() => {
+          updateMyCursor(blockId, position);
+        }, 100);
+      }
+    };
+
+    // Track cursor on selection change (when typing)
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const blockElement = range.commonAncestorContainer.nodeType === Node.TEXT_NODE
+          ? range.commonAncestorContainer.parentElement?.closest('[data-block-id]') as HTMLElement
+          : (range.commonAncestorContainer as Element).closest('[data-block-id]') as HTMLElement;
+
+        if (blockElement) {
+          const blockId = blockElement.getAttribute('data-block-id');
+          try {
+            const rect = range.getBoundingClientRect();
+            const blockRect = blockElement.getBoundingClientRect();
+            const position = {
+              x: rect.left - blockRect.left,
+              y: rect.top - blockRect.top,
+            };
+
+            if (cursorUpdateTimeoutRef.current) {
+              clearTimeout(cursorUpdateTimeoutRef.current);
+            }
+            cursorUpdateTimeoutRef.current = setTimeout(() => {
+              updateMyCursor(blockId, position);
+            }, 100);
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('selectionchange', handleSelectionChange);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      if (cursorUpdateTimeoutRef.current) {
+        clearTimeout(cursorUpdateTimeoutRef.current);
+      }
+      if (channel) {
+        channel.unsubscribe();
+        channel.untrack();
+      }
+    };
+  }, [journalId, user?.id, user?.user_metadata, user?.email]);
+
   // Auto-save blocks
   useEffect(() => {
     if (!journalId) return;
@@ -1532,8 +1763,8 @@ Content: ${content}`;
       if (!journalId) return;
       
       // Get user for security check
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
         console.error('Cannot save: user not authenticated');
         return;
       }
@@ -1546,7 +1777,7 @@ Content: ${content}`;
         .from("journals")
         .update({ content })
         .eq("id", journalId)
-        .eq("user_id", user.id); // Only update if user owns it
+        .eq("user_id", authUser.id); // Only update if user owns it
 
       if (error) {
         console.error('Error saving journal:', error);
@@ -1586,7 +1817,9 @@ Content: ${content}`;
         const isTyping = 
           target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
-          (target.isContentEditable && target.closest('[contenteditable="true"]'));
+          target.contentEditable === 'true' ||
+          target.closest('[contenteditable="true"]') !== null ||
+          target.closest('[data-block-id]') !== null;
         
         // Only prevent default if NOT typing in an editable element
         // This allows normal text selection (Ctrl+A) when typing
@@ -1607,7 +1840,7 @@ Content: ${content}`;
 
     document.addEventListener('keydown', handleSelectAll);
     return () => document.removeEventListener('keydown', handleSelectAll);
-  }, [blocks]);
+  }, [blocks, setSelectedBlockIds]);
 
   // Handle Escape to clear block selection
   useEffect(() => {
@@ -1650,13 +1883,15 @@ Content: ${content}`;
   // Keyboard navigation for flashcards
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
-      // Don't handle keyboard events when user is typing in input fields
+      // Don't handle keyboard events when user is typing in input fields or contentEditable blocks
       const activeElement = document.activeElement;
       if (activeElement && (
         activeElement.tagName === 'INPUT' ||
         activeElement.tagName === 'TEXTAREA' ||
         activeElement.contentEditable === 'true' ||
-        activeElement.closest('[data-chat-input]')
+        activeElement.closest('[contenteditable="true"]') !== null ||
+        activeElement.closest('[data-block-id]') !== null ||
+        activeElement.closest('[data-chat-input]') !== null
       )) {
         return;
       }
@@ -2320,6 +2555,16 @@ Content: ${content}`;
   // Follows journal formatting rules: NO asterisks, use HTML tags instead
   const cleanMarkdownForJournal = useCallback((text: string): string => {
     let cleaned = text;
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Editor.tsx:2557',message:'cleanMarkdownForJournal entry',data:{inputText:text.substring(0,100),hasMarkdownLink:/\[([^\]]+)\]\(([^\)]+)\)/.test(text)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    // Step 0: Convert markdown links [text](url) to <a> tags BEFORE other processing
+    // This must happen before asterisk removal to avoid conflicts
+    cleaned = cleaned.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline">$1</a>');
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Editor.tsx:2562',message:'After markdown link conversion',data:{cleanedText:cleaned.substring(0,150),hasLinkTag:cleaned.includes('<a href')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     
     // Step 1: Convert markdown bold (**text**) to <strong>text</strong>
     // Handle multiple bold sections in one line
@@ -2341,11 +2586,17 @@ Content: ${content}`;
     // Step 5: Trim whitespace
     cleaned = cleaned.trim();
     
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Editor.tsx:2584',message:'cleanMarkdownForJournal exit',data:{outputText:cleaned.substring(0,150),hasLinkTag:cleaned.includes('<a href')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return cleaned;
   }, []);
 
   // Expose insert content function via callback
   const insertContent = useCallback((content: string | null | undefined) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Editor.tsx:2586',message:'insertContent entry',data:{contentLength:content?.length,hasMarkdownLink:content ? /\[([^\]]+)\]\(([^\)]+)\)/.test(content) : false,contentPreview:content?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (!content || typeof content !== 'string') {
       return;
     }
@@ -2368,6 +2619,9 @@ Content: ${content}`;
         if (paraText) {
           // Clean markdown from paragraph text
           const cleanedText = cleanMarkdownForJournal(paraText);
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Editor.tsx:2621',message:'Block content after cleaning',data:{cleanedText:cleanedText.substring(0,150),hasLinkTag:cleanedText.includes('<a href')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           newBlocks.push({
             id: `paragraph-${Date.now()}-${newBlocks.length}-${Math.random().toString(36).substr(2, 5)}`,
             type: 'paragraph' as BlockType,
@@ -2924,8 +3178,80 @@ Content: ${content}`;
           }
           break;
         case 'comment':
-          // Comment functionality - could be implemented later
-          console.log('Comment action');
+          // Create a comment by wrapping the selection with a purple underlined span
+          if (range && !range.collapsed) {
+            try {
+              // Find the block ID from the range
+              const container = range.commonAncestorContainer;
+              let blockElement: HTMLElement | null = null;
+              if (container.nodeType === Node.TEXT_NODE) {
+                blockElement = container.parentElement?.closest('[data-block-id]') as HTMLElement;
+              } else {
+                blockElement = (container as Element).closest('[data-block-id]') as HTMLElement;
+              }
+              
+              if (blockElement) {
+                const blockId = blockElement.getAttribute('data-block-id') || '';
+                
+                // Get text offsets within the block
+                const blockText = blockElement.textContent || '';
+                const selectedText = range.toString();
+                const rangePreCaret = range.cloneRange();
+                rangePreCaret.selectNodeContents(blockElement);
+                rangePreCaret.setEnd(range.endContainer, range.endOffset);
+                const startOffset = rangePreCaret.toString().length - selectedText.length;
+                const endOffset = rangePreCaret.toString().length;
+                
+                // Create comment ID
+                const commentId = `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                
+                // Wrap selection in a span with purple underline
+                const span = document.createElement('span');
+                span.className = 'comment-highlight';
+                span.setAttribute('data-comment-id', commentId);
+                span.style.textDecoration = 'underline';
+                span.style.textDecorationColor = '#a855f7'; // purple-500
+                span.style.textDecorationThickness = '2px';
+                span.style.cursor = 'pointer';
+                
+                // Wrap the selected content
+                try {
+                  range.surroundContents(span);
+                } catch (e) {
+                  // If surroundContents fails (e.g., selection spans multiple elements), use extractContents
+                  const contents = range.extractContents();
+                  span.appendChild(contents);
+                  range.insertNode(span);
+                }
+                
+                // Add comment to state
+                setComments(prev => [...prev, {
+                  id: commentId,
+                  blockId,
+                  commentText: '',
+                  startOffset,
+                  endOffset
+                }]);
+                
+                // Open comment editor
+                setEditingCommentId(commentId);
+                setCommentEditorText('');
+                
+                // Restore cursor
+                const newRange = document.createRange();
+                newRange.setStartAfter(span);
+                newRange.collapse(true);
+                const newSelection = window.getSelection();
+                if (newSelection) {
+                  newSelection.removeAllRanges();
+                  newSelection.addRange(newRange);
+                }
+              }
+            } catch (e) {
+              console.error('Error creating comment:', e);
+              toast({ title: "Error", description: "Failed to create comment", variant: "destructive" });
+            }
+          }
           break;
         case 'textStyle':
           if (value) {
@@ -3105,7 +3431,7 @@ Content: ${content}`;
                 }
               } catch (e) {
                 // Fallback to execCommand if the manual method fails
-                document.execCommand('removeFormat', false);
+            document.execCommand('removeFormat', false);
                 // Also remove backColor (highlight)
                 document.execCommand('backColor', false, 'transparent');
                 document.execCommand('foreColor', false, 'inherit');
@@ -3168,7 +3494,7 @@ Content: ${content}`;
           element.closest('iframe')
         )) {
           return;
-        }
+      }
       }
       
       // Also check if active element is within Desmos
@@ -3794,8 +4120,95 @@ Content: ${content}`;
     );
   };
 
+  // Helper function to highlight slash commands in purple
+  const highlightSlashCommand = useCallback((element: HTMLElement, slashIndex: number, filter: string) => {
+    if (!element || slashIndex === -1) return;
+    
+    const textContent = element.textContent || '';
+    const commandText = textContent.substring(slashIndex);
+    const spaceIndex = commandText.indexOf(' ');
+    const commandEnd = spaceIndex === -1 ? commandText.length : spaceIndex;
+    const fullCommand = commandText.substring(0, commandEnd);
+    
+    // Only highlight if it matches a valid command
+    const isValidCommand = SLASH_COMMANDS.some(cmd => 
+      fullCommand === `/${cmd.command}` || fullCommand.startsWith(`/${cmd.command} `)
+    );
+    
+    if (isValidCommand && fullCommand.length > 1) {
+      // Save cursor position
+      const selection = window.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      const cursorOffset = range ? getTextOffsetBeforeCursor(element, range) : -1;
+      
+      // Create highlighted version
+      const beforeCommand = textContent.substring(0, slashIndex);
+      const afterCommand = textContent.substring(slashIndex + fullCommand.length);
+      
+      // Check if already highlighted to avoid re-rendering
+      const currentHTML = element.innerHTML;
+      if (!currentHTML.includes('text-purple-600') && !currentHTML.includes('text-purple-400')) {
+        element.innerHTML = `${escapeHtml(beforeCommand)}<span class="text-purple-600 dark:text-purple-400">${escapeHtml(fullCommand)}</span>${escapeHtml(afterCommand)}`;
+        
+        // Restore cursor position
+        if (cursorOffset !== -1 && selection) {
+          restoreCursorPosition(element, cursorOffset, selection);
+        }
+      }
+    }
+  }, []);
+
+  // Helper to get text offset before cursor
+  const getTextOffsetBeforeCursor = (element: HTMLElement, range: Range): number => {
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(element);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
+    return preCaretRange.toString().length;
+  };
+
+  // Helper to restore cursor position
+  const restoreCursorPosition = (element: HTMLElement, offset: number, selection: Selection) => {
+    const range = document.createRange();
+    let charCount = 0;
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+    
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const textNode = node as Text;
+      const nodeLength = textNode.textContent?.length || 0;
+      if (charCount + nodeLength >= offset) {
+        range.setStart(textNode, offset - charCount);
+        range.setEnd(textNode, offset - charCount);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return;
+      }
+      charCount += nodeLength;
+    }
+    
+    // Fallback: set at end
+    if (element.lastChild && element.lastChild.nodeType === Node.TEXT_NODE) {
+      const lastText = element.lastChild as Text;
+      range.setStart(lastText, lastText.textContent?.length || 0);
+      range.setEnd(lastText, lastText.textContent?.length || 0);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  };
+
+  // Helper to escape HTML
+  const escapeHtml = (text: string): string => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+
   // ContentEditable Block Component
-  const EditableBlock = ({ block, index, notionBlock, slashCommand, openSlashCommand, closeSlashCommand, updateSlashFilter, atCommand, openAtCommand, closeAtCommand, updateAtFilter, handleAtCommand, atCommandSelectedIndex, setAtCommandSelectedIndex, setFocusedBlockId, addNewBlock, deleteBlock, blocks, setBlocks, selectedBlockIds, setSelectedBlockIds, generateQuizFromContent, generateFlashcardsFromContent }: {
+  const EditableBlock = ({ block, index, notionBlock, slashCommand, openSlashCommand, closeSlashCommand, updateSlashFilter, handleSlashCommand, atCommand, openAtCommand, closeAtCommand, updateAtFilter, handleAtCommand, atCommandSelectedIndex, setAtCommandSelectedIndex, setFocusedBlockId, addNewBlock, deleteBlock, blocks, setBlocks, selectedBlockIds, setSelectedBlockIds, generateQuizFromContent, generateFlashcardsFromContent }: {
     block: Block;
     index: number;
     notionBlock: NotionBlock;
@@ -3803,6 +4216,7 @@ Content: ${content}`;
     openSlashCommand: (blockId: string, position: { top: number; left: number }, filter?: string) => void;
     closeSlashCommand: () => void;
     updateSlashFilter: (filter: string) => void;
+    handleSlashCommand: (command: SlashCommand) => void;
     atCommand: { isOpen: boolean; position: { top: number; left: number }; filter: string; blockId: string; startOffset: number } | null;
     openAtCommand: (blockId: string, position: { top: number; left: number }, startOffset: number) => void;
     closeAtCommand: () => void;
@@ -3954,14 +4368,85 @@ Content: ${content}`;
       }
     }, []);
 
+    // Helper to convert markdown to HTML in existing content
+    const processMarkdownInContent = (content: string): string => {
+      if (!content) return content;
+      
+      // Check if content already has HTML tags (not markdown)
+      if (content.includes('<') && content.includes('>')) {
+        // Already HTML, but check for embedded markdown in text nodes
+        // This handles cases where markdown exists within HTML
+        return content.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/(?<!\*)\*([^*\s][^*]*?[^*\s])\*(?!\*)/g, '<em>$1</em>');
+      }
+      
+      // Pure markdown text - convert to HTML
+      return content.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/(?<!\*)\*([^*\s][^*]*?[^*\s])\*(?!\*)/g, '<em>$1</em>');
+    };
+
+    // Attach comment event handlers to comment spans
+    useEffect(() => {
+      if (!blockRef.current) return;
+      
+      const handleCommentMouseEnter = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.hasAttribute('data-comment-id')) {
+          const commentId = target.getAttribute('data-comment-id');
+          if (commentId) {
+            setHoveredCommentId(commentId);
+          }
+        }
+      };
+      
+      const handleCommentMouseLeave = () => {
+        setHoveredCommentId(null);
+      };
+      
+      const handleCommentClick = (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.hasAttribute('data-comment-id')) {
+          e.preventDefault();
+          e.stopPropagation();
+          const commentId = target.getAttribute('data-comment-id');
+          if (commentId) {
+            const comment = comments.find(c => c.id === commentId);
+            setEditingCommentId(commentId);
+            setCommentEditorText(comment?.commentText || '');
+            // Focus the editor after a short delay
+            setTimeout(() => {
+              commentEditorRef.current?.focus();
+            }, 100);
+          }
+        }
+      };
+      
+      // Attach event listeners to all comment spans in this block
+      const commentSpans = blockRef.current.querySelectorAll('[data-comment-id]');
+      commentSpans.forEach(span => {
+        span.addEventListener('mouseenter', handleCommentMouseEnter);
+        span.addEventListener('mouseleave', handleCommentMouseLeave);
+        span.addEventListener('click', handleCommentClick);
+      });
+      
+      return () => {
+        commentSpans.forEach(span => {
+          span.removeEventListener('mouseenter', handleCommentMouseEnter);
+          span.removeEventListener('mouseleave', handleCommentMouseLeave);
+          span.removeEventListener('click', handleCommentClick);
+        });
+      };
+    }, [block.id, comments, setHoveredCommentId, setEditingCommentId, commentEditorRef]);
+
     // Initialize and sync content when block changes externally
     useEffect(() => {
       if (!blockRef.current) return;
       
       if (isInitialMount.current) {
-        // On initial mount, set the content
-        blockRef.current.innerHTML = notionBlock.content || '';
-        lastContentRef.current = notionBlock.content || '';
+        // On initial mount, set the content (convert markdown to HTML if needed)
+        const processedContent = processMarkdownInContent(notionBlock.content || '');
+        blockRef.current.innerHTML = processedContent;
+        lastContentRef.current = processedContent;
         isInitialMount.current = false;
         return;
       }
@@ -3979,14 +4464,15 @@ Content: ${content}`;
       
       // Only update if content changed externally (not from user typing)
       // Also check that lastContentRef doesn't match to avoid overwriting user's current typing
-      if (currentHtml !== notionBlock.content && 
-          notionBlock.content !== undefined &&
-          lastContentRef.current !== notionBlock.content &&
+      const processedContent = processMarkdownInContent(notionBlock.content || '');
+      if (currentHtml !== processedContent && 
+          processedContent !== undefined &&
+          lastContentRef.current !== processedContent &&
           currentHtml === lastContentRef.current) {
         // Only sync if current HTML matches what we last saved (meaning it's an external change)
         saveSelection();
-        blockRef.current.innerHTML = notionBlock.content;
-        lastContentRef.current = notionBlock.content;
+        blockRef.current.innerHTML = processedContent;
+        lastContentRef.current = processedContent;
         setTimeout(() => restoreSelection(), 0);
       }
     }, [notionBlock.content, notionBlock.type, saveSelection, restoreSelection]);
@@ -4029,8 +4515,23 @@ Content: ${content}`;
             const htmlContent = e.currentTarget.innerHTML;
             const textContent = e.currentTarget.textContent || '';
             
-            // Update last content ref immediately to prevent sync conflicts
-            lastContentRef.current = htmlContent;
+            // Process markdown in the content - convert **text** to <strong>text</strong>
+            // Simple regex replacement on the HTML string
+            const processMarkdownInContent = (content: string): string => {
+              if (!content) return content;
+              // Convert **text** to <strong>text</strong>
+              // Use negative lookbehind/lookahead to avoid matching already processed content
+              let processed = content.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+              // Convert *text* to <em>text</em> (but not **text** which is already processed)
+              processed = processed.replace(/(?<!<strong>)(?<!\*)\*([^*\s][^*]*?[^*\s])\*(?!\*)(?!<\/strong>)/g, '<em>$1</em>');
+              return processed;
+            };
+            
+            const processedHtml = processMarkdownInContent(htmlContent);
+            
+            // Update last content ref IMMEDIATELY before any state updates to prevent sync conflicts
+            // This must happen before slash command detection to prevent content being overwritten
+            lastContentRef.current = processedHtml;
             
             // Clear any pending save timeout
             if (saveTimeoutRef.current) {
@@ -4040,12 +4541,11 @@ Content: ${content}`;
             // Debounce state updates - don't interfere with browser's cursor handling
             saveTimeoutRef.current = setTimeout(() => {
               setBlocks(prev => prev.map(b =>
-                b.id === block.id ? { ...b, content: htmlContent } as NotionBlock : b
+                b.id === block.id ? { ...b, content: processedHtml } as NotionBlock : b
               ));
               // Keep editing flag active longer to prevent sync interference
-              setTimeout(() => {
-                isEditingRef.current = false;
-              }, 300);
+              // Don't reset isEditingRef immediately - only reset when focus is actually lost
+              // This prevents the sync effect from interfering while user is still typing
             }, 500);
             
             // Get selection for @ command detection
@@ -4207,12 +4707,34 @@ Content: ${content}`;
                 }
               } else if (!slashCommand) {
                 const rect = e.currentTarget.getBoundingClientRect();
+                // Store current content before opening slash command to prevent it from being overwritten
+                const currentInnerHTML = e.currentTarget.innerHTML;
                 // Initialize slash command with filter directly to avoid timing issues
                 openSlashCommand(block.id, { top: rect.bottom + 20, left: rect.left }, filter);
+                // Ensure content stays after opening menu (in case re-render happens)
+                requestAnimationFrame(() => {
+                  if (blockRef.current && blockRef.current.innerHTML !== currentInnerHTML && isEditingRef.current) {
+                    blockRef.current.innerHTML = currentInnerHTML;
+                    // Restore cursor position
+                    const selection = window.getSelection();
+                    if (selection && selection.rangeCount > 0) {
+                      const range = selection.getRangeAt(0);
+                      const savedOffset = range.startOffset;
+                      range.setStart(blockRef.current, savedOffset);
+                      range.collapse(true);
+                      selection.removeAllRanges();
+                      selection.addRange(range);
+                    }
+                  }
+                });
               } else if (slashCommand.blockId === block.id) {
                 // Only update filter if not typing topic
                 if (!textAfterSlash.startsWith('/quiz ') && !textAfterSlash.startsWith('/flashcards ')) {
                   updateSlashFilter(filter);
+                  // Highlight the command in purple
+                  requestAnimationFrame(() => {
+                    highlightSlashCommand(e.currentTarget, lastSlashIndex, filter);
+                  });
                 }
               }
             } else if (slashCommand && slashCommand.blockId === block.id) {
@@ -4222,16 +4744,25 @@ Content: ${content}`;
             
             // Content update is already handled in the debounced timeout at the start of onInput
           }}
-          onBlur={() => {
+          onBlur={(e) => {
             // Clear any pending timeout
             if (saveTimeoutRef.current) {
               clearTimeout(saveTimeoutRef.current);
               saveTimeoutRef.current = null;
             }
-            // Reset editing flag when focus is lost
-            setTimeout(() => {
-              isEditingRef.current = false;
-            }, 200);
+            // Reset editing flag when focus is lost (only if not moving to another editable element)
+            // Check if focus is moving to another contentEditable in the same component
+            const relatedTarget = e.relatedTarget as HTMLElement;
+            const isMovingToEditable = relatedTarget && (
+              relatedTarget.contentEditable === 'true' ||
+              relatedTarget.closest('[contenteditable="true"]') !== null ||
+              relatedTarget.closest('[data-block-id]') !== null
+            );
+            if (!isMovingToEditable) {
+              setTimeout(() => {
+                isEditingRef.current = false;
+              }, 200);
+            }
           }}
           onFocus={() => {
             // Mark as editing when focused to prevent sync
@@ -4282,6 +4813,19 @@ Content: ${content}`;
             
             // Check if block contains a command chip
             const hasCommandChip = blockRef.current?.querySelector('[data-is-command="true"]') !== null;
+            
+            // Handle slash command selection with Enter
+            if (slashCommand && slashCommand.blockId === block.id && e.key === 'Enter' && !e.shiftKey) {
+              const filteredCommands = SLASH_COMMANDS.filter(cmd =>
+                cmd.command.toLowerCase().includes(slashCommand.filter.toLowerCase()) ||
+                cmd.label.toLowerCase().includes(slashCommand.filter.toLowerCase())
+              );
+              if (filteredCommands.length > 0) {
+                e.preventDefault();
+                handleSlashCommand(filteredCommands[0]);
+                return;
+              }
+            }
             
             // Handle /quiz and /flashcards commands
             if (e.key === 'Enter' && !e.shiftKey && blockRef.current) {
@@ -4897,6 +5441,17 @@ Content: ${content}`;
     );
   }, [horizontalDropTarget, blocks, draggedBlock, draggedIndex, handleDragStart, handleDragEnd, collapseRowIfNeeded, setBlocks]);
 
+  // Memoized callback factory for calculator state changes
+  const createCalculatorStateChangeHandler = useCallback((blockId: string) => {
+    return (state: string) => {
+      setBlocks(prev => prev.map(b => 
+        b.id === blockId && b.type === 'calculator'
+          ? { ...b, calculatorState: state } as DesmosBlock
+          : b
+      ));
+    };
+  }, []);
+
   const renderBlock = useCallback((block: Block, index: number) => {
     // Handle row blocks
     if (block.type === 'row') {
@@ -4980,7 +5535,7 @@ Content: ${content}`;
           </div>
 
           {/* Quiz Container */}
-          <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+          <div className="bg-card rounded-lg p-6 shadow-sm min-h-[400px]">
             {/* Quiz Header */}
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-foreground">{quizBlock.quiz.title}</h3>
@@ -5001,20 +5556,20 @@ Content: ${content}`;
 
             {!quizBlock.showResults ? (
               /* Quiz Question */
-              <div>
-                <div className="text-base font-medium text-foreground mb-4">
+              <div className="flex flex-col h-full min-h-[300px]">
+                <div className="text-2xl font-medium text-foreground mb-8 flex-shrink-0">
                   {currentQuestion?.question || 'No questions available'}
                 </div>
                 {currentQuestion && (
-                  <div className="space-y-2">
+                  <div className="flex-1 flex flex-col justify-center space-y-4">
                     {currentQuestion.options.map((option, optionIndex) => (
                       <Button
                         key={optionIndex}
-                        variant="outline"
-                        className="w-full justify-start text-left h-auto py-3 px-4 hover:bg-primary/10"
+                        variant="ghost"
+                        className="w-full justify-start text-left h-auto py-6 px-6 text-lg bg-sidebar-accent hover:bg-sidebar-accent/80 transition-colors"
                         onClick={() => handleQuizAnswer(block.id, optionIndex)}
                       >
-                        <span className="font-semibold mr-3 text-primary">
+                        <span className="font-semibold mr-4 text-primary text-xl">
                           {String.fromCharCode(65 + optionIndex)}.
                         </span>
                         {option}
@@ -5085,7 +5640,7 @@ Content: ${content}`;
           </div>
 
           {/* Flashcards Container */}
-          <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+          <div className="bg-card rounded-lg p-6 shadow-sm">
             {/* Flashcards Header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -5576,7 +6131,7 @@ Content: ${content}`;
                       ));
                     }}
                     disabled={flashcardsBlock.currentCardIndex === 0}
-                    className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-3 bg-background/80 hover:bg-background border border-border rounded-full shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ left: '-60px' }}
                   >
                     <svg className="w-6 h-6 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5594,7 +6149,7 @@ Content: ${content}`;
                       ));
                     }}
                     disabled={flashcardsBlock.currentCardIndex === flashcardsBlock.flashcards.cards.length - 1}
-                    className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-3 bg-background/80 hover:bg-background border border-border rounded-full shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 p-3 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ right: '-60px' }}
                   >
                     <svg className="w-6 h-6 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -5670,7 +6225,7 @@ Content: ${content}`;
                         });
                       });
                     }}
-                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
+                    className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3"
                   >
                     Edit Cards
                   </button>
@@ -5707,7 +6262,7 @@ Content: ${content}`;
 
           {/* Calculator Container - not draggable, allows graph interaction */}
           <div 
-            className="bg-card rounded-lg" 
+            className="bg-card rounded-2xl overflow-hidden" 
             draggable={false}
             data-desmos-calculator="true"
           >
@@ -5716,13 +6271,7 @@ Content: ${content}`;
               calculatorState={calculatorBlock.calculatorState}
               width={calculatorBlock.width}
               height={calculatorBlock.height}
-              onStateChange={(state) => {
-                setBlocks(prev => prev.map(b => 
-                  b.id === block.id && b.type === 'calculator'
-                    ? { ...b, calculatorState: state } as DesmosBlock
-                    : b
-                ));
-              }}
+              onStateChange={createCalculatorStateChangeHandler(block.id)}
             />
           </div>
 
@@ -5809,6 +6358,7 @@ Content: ${content}`;
         openSlashCommand={openSlashCommand}
         closeSlashCommand={closeSlashCommand}
         updateSlashFilter={updateSlashFilter}
+        handleSlashCommand={handleSlashCommand}
         atCommand={atCommand}
         openAtCommand={openAtCommand}
         closeAtCommand={closeAtCommand}
@@ -5850,7 +6400,7 @@ Content: ${content}`;
   }, [blocks, onWordCountChange]);
 
   return (
-    <div className="flex-1 flex flex-col bg-editor overflow-y-auto">
+    <ScrollArea className="flex-1 flex flex-col bg-editor">
       <div className="flex-1 px-12 pt-6 pb-0 flex flex-col min-h-full">
         <div ref={containerRef} className="relative flex-1">
           {/* Formatting Toolbar */}
@@ -5884,6 +6434,126 @@ Content: ${content}`;
               onSelectedIndexChange={setAtCommandSelectedIndex}
             />
           )}
+
+          {/* Comment Tooltip */}
+          {hoveredCommentId && (() => {
+            const comment = comments.find(c => c.id === hoveredCommentId);
+            if (!comment) return null;
+            const span = document.querySelector(`[data-comment-id="${hoveredCommentId}"]`) as HTMLElement;
+            if (!span) return null;
+            const rect = span.getBoundingClientRect();
+            return (
+              <div
+                className="fixed z-[60] bg-popover border border-border rounded-lg shadow-lg p-2 max-w-xs"
+                style={{
+                  top: `${rect.top - 10}px`,
+                  left: `${rect.left}px`,
+                  transform: 'translateY(-100%)'
+                }}
+              >
+                <div className="text-sm text-foreground">
+                  {comment.commentText || <span className="text-muted-foreground italic">No comment yet</span>}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Comment Editor */}
+          {editingCommentId && (() => {
+            const comment = comments.find(c => c.id === editingCommentId);
+            const span = document.querySelector(`[data-comment-id="${editingCommentId}"]`) as HTMLElement;
+            if (!span) return null;
+            const rect = span.getBoundingClientRect();
+            return (
+              <div
+                className="fixed z-[60] bg-popover border border-border rounded-lg shadow-lg p-3 w-80"
+                style={{
+                  top: `${rect.bottom + 10}px`,
+                  left: `${rect.left}px`
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <textarea
+                  ref={commentEditorRef}
+                  value={commentEditorText}
+                  onChange={(e) => setCommentEditorText(e.target.value)}
+                  placeholder="Add a comment..."
+                  className="w-full min-h-[80px] p-2 border border-border rounded resize-none text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setEditingCommentId(null);
+                    } else if (e.key === 'Enter' && e.ctrlKey) {
+                      // Ctrl+Enter to save
+                      setComments(prev => prev.map(c => 
+                        c.id === editingCommentId ? { ...c, commentText: commentEditorText } : c
+                      ));
+                      setEditingCommentId(null);
+                    }
+                  }}
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2 mt-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingCommentId(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setComments(prev => prev.map(c => 
+                        c.id === editingCommentId ? { ...c, commentText: commentEditorText } : c
+                      ));
+                      setEditingCommentId(null);
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Collaborative Cursors */}
+          {Array.from(collaboratorCursors.values()).map((cursor) => {
+            if (!cursor.position || !cursor.blockId) return null;
+            
+            const blockElement = document.querySelector(`[data-block-id="${cursor.blockId}"]`) as HTMLElement;
+            if (!blockElement) return null;
+            
+            const blockRect = blockElement.getBoundingClientRect();
+            const cursorStyle: React.CSSProperties = {
+              position: 'fixed',
+              left: `${blockRect.left + cursor.position.x}px`,
+              top: `${blockRect.top + cursor.position.y}px`,
+              width: '2px',
+              height: '20px',
+              backgroundColor: cursor.color,
+              pointerEvents: 'none',
+              zIndex: 1000,
+              animation: 'blink 1s infinite',
+            };
+            
+            return (
+              <div
+                key={cursor.userId}
+                style={cursorStyle}
+                className="collaborator-cursor"
+                title={cursor.userName}
+                data-user-id={cursor.userId}
+              >
+                {/* Name label that appears on hover */}
+                <div
+                  className="absolute left-2 top-0 bg-popover border border-border rounded px-2 py-1 text-xs shadow-lg whitespace-nowrap pointer-events-auto opacity-0 hover:opacity-100 transition-opacity"
+                  style={{ backgroundColor: cursor.color, color: 'white' }}
+                >
+                  {cursor.userName}
+                </div>
+              </div>
+            );
+          })}
 
           <div className="space-y-1">
             {blocks.map((block, index) => (
@@ -5979,6 +6649,6 @@ Content: ${content}`;
           </div>
         </div>
       </div>
-    </div>
+    </ScrollArea>
   );
 };

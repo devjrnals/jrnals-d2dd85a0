@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 type QuizQuestion = {
   question: string;
@@ -40,6 +41,12 @@ const Journal = () => {
   const [wordCount, setWordCount] = useState(0);
   const [confirmTrashOpen, setConfirmTrashOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
+  // Load saved chat sidebar width from localStorage
+  const [chatSidebarSize, setChatSidebarSize] = useState(() => {
+    const saved = localStorage.getItem('chat-sidebar-size');
+    return saved ? parseFloat(saved) : 30; // Default to 30% if not saved
+  });
 
   // Quiz state
   const [currentQuiz, setCurrentQuiz] = useState<QuizData | null>(null);
@@ -199,11 +206,76 @@ const Journal = () => {
         onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
         sidebarCollapsed={sidebarCollapsed}
       />
-      {/* Content area under the TopBar */}
-      <div className={`flex-1 flex overflow-hidden transition-all duration-300 ${!sidebarCollapsed ? 'lg:pr-[420px]' : ''}`}>
-        <div className="flex-1 min-w-0 flex flex-col">
+      {/* Content area under the TopBar with resizable panels */}
+      <div className="flex-1 overflow-hidden">
+        <div className="hidden lg:flex h-full">
+          <ResizablePanelGroup 
+            direction="horizontal" 
+            className="h-full"
+            onLayout={(sizes) => {
+              // When sidebar is visible and we have 2 panels, save the second panel's size
+              if (!sidebarCollapsed && sizes.length === 2) {
+                const sidebarSize = sizes[1];
+                setChatSidebarSize(sidebarSize);
+                localStorage.setItem('chat-sidebar-size', sidebarSize.toString());
+              }
+            }}
+          >
+            <ResizablePanel defaultSize={sidebarCollapsed ? 100 : (100 - chatSidebarSize)} minSize={30}>
+              <div className="h-full flex flex-col">
+                <Editor
+                  key={journal.id} // Force remount when journal changes
+                  journalId={journal.id}
+                  initialContent={journal.content || ""}
+                  onWordCountChange={setWordCount}
+                  currentQuiz={currentQuiz}
+                  currentFlashcards={currentFlashcards}
+                  onQuizAdded={() => {
+                    console.log('Clearing current quiz state');
+                    setCurrentQuiz(null);
+                  }}
+                  onFlashcardsAdded={() => {
+                    console.log('Clearing current flashcards state');
+                    setCurrentFlashcards(null);
+                  }}
+                  onInsertContentReady={(callback) => {
+                    // Store the callback directly
+                    insertContentRef.current = callback;
+                    setInsertContentCallback(() => callback);
+                  }}
+                />
+              </div>
+            </ResizablePanel>
+            
+            {!sidebarCollapsed && (
+              <>
+                <ResizableHandle withHandle />
+                <ResizablePanel 
+                  defaultSize={chatSidebarSize} 
+                  minSize={20} 
+                  maxSize={50}
+                >
+                  <div className="h-full bg-muted rounded-l-[20px]">
+                    <ChatbotSidebar
+                      journalTitle={journal.title}
+                      journalId={journal.id}
+                      onQuizGenerated={handleQuizGenerated}
+                      onFlashcardsGenerated={handleFlashcardsGenerated}
+                      onInsertContent={handleInsertContent}
+                      initialMessage={(location.state as any)?.initialMessage}
+                      initialFiles={(location.state as any)?.initialFiles}
+                    />
+                  </div>
+                </ResizablePanel>
+              </>
+            )}
+          </ResizablePanelGroup>
+        </div>
+
+        {/* Mobile/tablet view - keep original layout */}
+        <div className="lg:hidden flex-1 flex flex-col">
           <Editor
-            key={journal.id} // Force remount when journal changes
+            key={journal.id}
             journalId={journal.id}
             initialContent={journal.content || ""}
             onWordCountChange={setWordCount}
@@ -218,25 +290,11 @@ const Journal = () => {
               setCurrentFlashcards(null);
             }}
             onInsertContentReady={(callback) => {
-              // Store the callback directly
               insertContentRef.current = callback;
               setInsertContentCallback(() => callback);
             }}
           />
         </div>
-      </div>
-
-      {/* Right-side chatbot panel (desktop) - full height from top of page */}
-      <div className={`hidden lg:flex w-[420px] fixed top-0 right-0 h-full bg-muted rounded-l-[20px] z-10 transition-transform duration-300 ease-in-out ${sidebarCollapsed ? 'translate-x-full' : 'translate-x-0'}`}>
-        <ChatbotSidebar
-          journalTitle={journal.title}
-          journalId={journal.id}
-          onQuizGenerated={handleQuizGenerated}
-          onFlashcardsGenerated={handleFlashcardsGenerated}
-          onInsertContent={handleInsertContent}
-          initialMessage={(location.state as any)?.initialMessage}
-          initialFiles={(location.state as any)?.initialFiles}
-        />
       </div>
 
       <ConfirmDialog

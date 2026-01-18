@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { SendHorizontal, Upload, PanelLeftClose, Share2, Edit, ChevronDown, Search, Plus, BookPlus, FileText, X, ArrowUp } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { SendHorizontal, Upload, PanelLeftClose, Share2, Edit, ChevronDown, Search, Plus, BookPlus, FileText, X, ArrowUp, Check, Music, Video, Network, FileText as FileTextIcon, Layers, HelpCircle, BarChart3, Presentation, Table, Calculator } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -7,10 +7,22 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { extractTextFromFile } from "@/utils/documentExtractor";
 import { LinkTextarea } from "@/components/LinkTextarea";
+import { useAuth } from "@/hooks/useAuth";
+
+// Get Supabase URL with fallback
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://xfbxmheoblotlhpveugv.supabase.co";
 
 type QuizData = {
   title: string;
@@ -101,7 +113,7 @@ const generateAITitle = async (userMessage: string, accessToken: string | null):
 
   try {
     // Use ai-chat endpoint which returns a simple JSON response
-    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -148,7 +160,7 @@ const generateAITitle = async (userMessage: string, accessToken: string | null):
   }
 };
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+const CHAT_URL = `${SUPABASE_URL}/functions/v1/chat`;
 
 // Slash command definitions for chat
 type ChatSlashCommand = {
@@ -159,6 +171,24 @@ type ChatSlashCommand = {
 };
 
 const CHAT_SLASH_COMMANDS: ChatSlashCommand[] = [
+  {
+    command: 'quiz',
+    label: 'Quiz',
+    description: 'Generate a quiz on any topic',
+    icon: '❓'
+  },
+  {
+    command: 'flashcards',
+    label: 'Flashcards',
+    description: 'Create flashcards from your content',
+    icon: '🎴'
+  },
+  {
+    command: 'calculator',
+    label: 'Calculator',
+    description: 'Open a calculator',
+    icon: '🔢'
+  },
   {
     command: 'cite',
     label: 'Cite',
@@ -172,6 +202,73 @@ const CHAT_SLASH_COMMANDS: ChatSlashCommand[] = [
     icon: '✓'
   }
 ];
+
+// Citation style options
+const CITATION_STYLES = [
+  { id: 'apa', label: 'APA (7th Edition)', value: 'APA' },
+  { id: 'mla', label: 'MLA (9th Edition)', value: 'MLA' },
+  { id: 'harvard', label: 'Harvard', value: 'Harvard' },
+  { id: 'chicago', label: 'Chicago', value: 'Chicago' },
+  { id: 'vancouver', label: 'Vancouver', value: 'Vancouver' },
+  { id: 'aglc', label: 'AGLC (4th Edition)', value: 'AGLC' },
+];
+
+// Citation Style Menu Component
+function CitationStyleMenu({
+  position,
+  onSelect,
+  onClose
+}: {
+  position: { top: number; left: number };
+  onSelect: (style: { id: string; label: string; value: string }) => void;
+  onClose: () => void;
+}) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(prev => Math.min(prev + 1, CITATION_STYLES.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(prev => Math.max(prev - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        onSelect(CITATION_STYLES[selectedIndex]);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIndex, onSelect, onClose]);
+
+  return (
+    <div
+      className="fixed z-50 w-72 rounded-md border bg-popover text-popover-foreground shadow-md outline-none max-h-[300px] overflow-y-auto"
+      style={{ top: position.top, left: position.left }}
+    >
+      <div className="p-1">
+        {CITATION_STYLES.map((style, index) => (
+          <button
+            key={style.id}
+            className={`relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground ${
+              index === selectedIndex ? 'bg-accent' : ''
+            }`}
+            onClick={() => onSelect(style)}
+            onMouseEnter={() => setSelectedIndex(index)}
+          >
+            <div className="flex flex-col items-start">
+              <div className="font-medium">{style.label}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // Slash Command Menu Component for Chat
 function ChatSlashCommandMenu({
@@ -368,6 +465,62 @@ const reformatMarkdown = (text: string): string => {
   return formatted;
 };
 
+// Function to fetch and extract text content from a URL
+const fetchUrlContent = async (url: string): Promise<string> => {
+  try {
+    // Try to fetch the URL content
+    // Note: This may fail due to CORS, in which case we'll pass the URL to the backend
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch URL: ${response.status}`);
+    }
+
+    const html = await response.text();
+    
+    // Create a temporary DOM element to parse HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    // Remove script and style elements
+    const scripts = doc.querySelectorAll('script, style, noscript');
+    scripts.forEach(el => el.remove());
+    
+    // Try to get main article content
+    const article = doc.querySelector('article') || 
+                   doc.querySelector('[role="article"]') ||
+                   doc.querySelector('main') ||
+                   doc.querySelector('.article') ||
+                   doc.querySelector('.content') ||
+                   doc.body;
+    
+    // Extract text content
+    let text = article?.textContent || doc.body.textContent || '';
+    
+    // Clean up the text
+    text = text
+      .replace(/\s+/g, ' ') // Replace multiple whitespace with single space
+      .replace(/\n\s*\n/g, '\n\n') // Replace multiple newlines with double newline
+      .trim();
+    
+    // Limit to first 10000 characters to avoid too much content
+    if (text.length > 10000) {
+      text = text.substring(0, 10000) + '... [content truncated]';
+    }
+    
+    return text || `[Unable to extract content from ${url}]`;
+  } catch (error) {
+    console.error('Error fetching URL content:', error);
+    // Return empty string - backend will handle URL fetching via Tavily
+    return '';
+  }
+};
+
 export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGenerated, onFlashcardsGenerated, onToggleSidebar, onShare, onInsertContent, initialMessage, initialFiles }: ChatbotSidebarProps) {
   const [draft, setDraft] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -391,8 +544,17 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
   const [slashCommand, setSlashCommand] = useState<{ isOpen: boolean; filter: string; position: { top: number; left: number } } | null>(null);
+  const [citationStyleMenu, setCitationStyleMenu] = useState<{ isOpen: boolean; position: { top: number; left: number } } | null>(null);
   const slashCommandRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [researchEnabled, setResearchEnabled] = useState(false);
+  
+  // @ Add context state
+  const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
+  const [journalSearchQuery, setJournalSearchQuery] = useState("");
+  const [selectedJournalIds, setSelectedJournalIds] = useState<Set<string>>(new Set());
+  const [availableJournals, setAvailableJournals] = useState<Array<{ id: string; title: string }>>([]);
+  const { user } = useAuth();
   
   // Keep ref in sync with prop
   useEffect(() => {
@@ -489,6 +651,68 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
       setCurrentChatId(null);
     }
   }, [journalId]);
+
+  // Load available journals for @ Add context
+  useEffect(() => {
+    const loadAvailableJournals = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from("journals")
+          .select("id, title")
+          .eq("user_id", user.id)
+          .neq("id", journalId || "") // Exclude current journal
+          .order("updated_at", { ascending: false });
+
+        if (error) {
+          console.error("Error loading journals:", error);
+        } else {
+          setAvailableJournals(data || []);
+        }
+      } catch (error) {
+        console.error("Error loading journals:", error);
+      }
+    };
+
+    if (isContextDropdownOpen && user) {
+      loadAvailableJournals();
+    }
+  }, [isContextDropdownOpen, user, journalId]);
+
+  // Filter journals based on search query
+  const filteredJournals = useMemo(() => {
+    if (!journalSearchQuery.trim()) return availableJournals;
+    const query = journalSearchQuery.toLowerCase();
+    return availableJournals.filter(journal =>
+      journal.title.toLowerCase().includes(query)
+    );
+  }, [availableJournals, journalSearchQuery]);
+
+  // Get selected journal objects
+  const selectedJournals = useMemo(() => {
+    return availableJournals.filter(journal => selectedJournalIds.has(journal.id));
+  }, [availableJournals, selectedJournalIds]);
+
+  // Handle journal selection
+  const handleJournalSelect = useCallback((journal: { id: string; title: string }) => {
+    const isSelected = selectedJournalIds.has(journal.id);
+    const newSelectedIds = new Set(selectedJournalIds);
+    
+    if (isSelected) {
+      newSelectedIds.delete(journal.id);
+    } else {
+      newSelectedIds.add(journal.id);
+    }
+    setSelectedJournalIds(newSelectedIds);
+  }, [selectedJournalIds]);
+
+  // Reset search when dropdown closes
+  useEffect(() => {
+    if (!isContextDropdownOpen) {
+      setJournalSearchQuery("");
+    }
+  }, [isContextDropdownOpen]);
 
   // Set initial files when provided
   useEffect(() => {
@@ -908,6 +1132,11 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
     onDone,
     onError,
     onStatus,
+    isCiteCommand: citeCommand = false,
+    citeStyle: citationStyle = '',
+    citeContent: citationContent = '',
+    isFactCheckCommand: factCheckCommand = false,
+    researchEnabled: researchMode = false,
   }: {
     messages: Array<{ role: string; content: string }>;
     journalTitle: string;
@@ -915,42 +1144,93 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
     onDone: () => void;
     onError: (error: string) => void;
     onStatus?: (status: string) => void;
+    isCiteCommand?: boolean;
+    citeStyle?: string;
+    citeContent?: string;
+    isFactCheckCommand?: boolean;
+    researchEnabled?: boolean;
   }) => {
-    // Get fresh access token
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    
-    if (!token) {
-      onError("You must be logged in to use the chatbot");
-      return;
+    // #region agent log
+    console.log('[DEBUG] streamChat called with researchMode:', researchMode, 'messagesCount:', chatMessages.length);
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1080',message:'streamChat entry',data:{researchMode,messagesCount:chatMessages.length,chatUrl:CHAT_URL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    try {
+      // Get fresh access token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1089',message:'Auth token check',data:{hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      
+      if (!token) {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1092',message:'No token error',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+        onError("You must be logged in to use the chatbot");
+        return;
+      }
+
+    const requestBody = { 
+      messages: chatMessages, 
+      journalTitle: title, 
+      enableWebSearch: true,
+      journalId: journalId,
+      isCiteCommand: citeCommand,
+      citeStyle: citationStyle,
+      citeContent: citationContent,
+      isFactCheckCommand: factCheckCommand,
+      researchEnabled: researchMode
+    };
+    // #region agent log
+    console.log('[DEBUG] Sending request body to backend:', { researchEnabled: requestBody.researchEnabled, hasMessages: !!requestBody.messages, fullBody: requestBody });
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1103',message:'Sending request body to backend',data:{researchEnabled:requestBody.researchEnabled,hasMessages:!!requestBody.messages},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1107',message:'Before fetch request',data:{chatUrl:CHAT_URL,hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    let resp: Response;
+    try {
+      resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1118',message:'Fetch response received',data:{status:resp.status,ok:resp.ok,hasBody:!!resp.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+    } catch (fetchError) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1121',message:'Fetch exception thrown',data:{error:fetchError instanceof Error ? fetchError.message : String(fetchError),errorName:fetchError instanceof Error ? fetchError.name : 'Unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      throw fetchError;
     }
 
-    const resp = await fetch(CHAT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ 
-        messages: chatMessages, 
-        journalTitle: title, 
-        enableWebSearch: true,
-        journalId: journalId,
-        isCiteCommand: isCiteCommand || false,
-        isFactCheckCommand: isFactCheckCommand || false
-      }),
-    });
-
     if (resp.status === 429) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1128',message:'Rate limit error',data:{status:resp.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       onError("Rate limit exceeded. Please try again later.");
       return;
     }
 
     if (!resp.ok || !resp.body) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1134',message:'Response not OK or missing body',data:{status:resp.status,ok:resp.ok,hasBody:!!resp.body},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       const errorData = await resp.json().catch(() => ({}));
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1137',message:'Response error data parsed',data:{status:resp.status,errorData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       onError(errorData.error || "Failed to start stream");
       return;
     }
+    
+    // #region agent log
+    console.log('[DEBUG] Backend response OK, starting to read stream, researchMode:', researchMode);
+    // #endregion
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -987,6 +1267,16 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
           try {
             const parsed = JSON.parse(jsonStr);
             
+            // Check if this is an error
+            if (parsed.error) {
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1173',message:'Stream error from backend',data:{error:parsed.error,researchMode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+              // #endregion
+              onError(parsed.error);
+              streamDone = true;
+              break;
+            }
+            
             // Check if this is a status update (either from status event or status field)
             if (isStatusEvent || parsed.status) {
               if (onStatus && parsed.status) {
@@ -998,9 +1288,17 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
             
             // Otherwise, it's content
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) onDelta(content);
+            if (content) {
+              // #region agent log
+              if (researchMode) console.log('[DEBUG] Received research content chunk:', content.substring(0, 50) + '...');
+              // #endregion
+              onDelta(content);
+            }
             isStatusEvent = false;
-          } catch {
+          } catch (parseError) {
+            // #region agent log
+            console.log('[DEBUG] JSON parse error in stream:', parseError, 'jsonStr:', jsonStr.substring(0, 100));
+            // #endregion
             textBuffer = line + "\n" + textBuffer;
             isStatusEvent = false;
             break;
@@ -1033,14 +1331,25 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
       }
     }
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1233',message:'streamChat completed successfully',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     onDone();
+    } catch (streamError) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1237',message:'streamChat exception caught',data:{error:streamError instanceof Error ? streamError.message : String(streamError),errorName:streamError instanceof Error ? streamError.name : 'Unknown',stack:streamError instanceof Error ? streamError.stack : undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      onError(streamError instanceof Error ? streamError.message : "An unexpected error occurred");
+      throw streamError;
+    }
   };
 
   const send = async (text: string) => {
     const trimmed = text.trim();
     if ((!trimmed && uploadedFiles.length === 0) || isLoading) return;
 
-    const isQuizRequest = trimmed.toLowerCase().includes("quiz me on");
+    // Detect slash commands
+    const isQuizRequest = trimmed.startsWith('/quiz');
     const isFlashcardsRequest = trimmed.toLowerCase().includes("create flashcards on") || trimmed.toLowerCase().includes("flashcards on");
     const isContentGenerationRequest = 
       trimmed.toLowerCase().includes("create structured notes") ||
@@ -1051,9 +1360,69 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
       trimmed.toLowerCase().includes("add to journal") ||
       trimmed.toLowerCase().includes("insert into journal");
     
-    // Detect slash commands
-    const isCiteCommand = trimmed.startsWith('/cite ');
+    // Detect other slash commands
+    // Match /cite [style] [link/content] format
+    const citeMatch = trimmed.match(/^\/cite\s+(\w+)\s+(.+)$/i);
+    const isCiteCommand = citeMatch !== null;
+    const citeStyle = citeMatch ? citeMatch[1] : '';
+    const citeContent = citeMatch ? citeMatch[2].trim() : '';
+    
+    // #region agent log
+    console.log('[DEBUG] Cite command detection:', { isCiteCommand, citeStyle, citeContent, trimmed: trimmed.substring(0, 100) });
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1369',message:'Cite command detection',data:{isCiteCommand,citeStyle,citeContent,trimmed:trimmed.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    // Validate cite command has both style and content
+    if (trimmed.startsWith('/cite ') && !isCiteCommand) {
+      toast({
+        title: "Citation format required",
+        description: "Please use: /cite [style] [link/book/etc] (e.g., /cite apa https://example.com)",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+      return;
+    }
+    
     const isFactCheckCommand = trimmed.startsWith('/fact-check') || trimmed.startsWith('/factcheck');
+    
+    // Extract fact-check content (URL or text) if /fact-check command is used
+    let factCheckContent = '';
+    let factCheckUrl = '';
+    if (isFactCheckCommand) {
+      factCheckContent = trimmed.replace(/^\/fact-check\s*/, '').replace(/^\/factcheck\s*/, '').trim();
+      if (!factCheckContent) {
+        toast({
+          title: "Fact-check content required",
+          description: "Please provide a URL or text to fact-check after /fact-check (e.g., /fact-check https://example.com/article)",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+      // Check if content is a URL
+      try {
+        const url = new URL(factCheckContent);
+        factCheckUrl = url.href;
+      } catch {
+        // Not a URL, treat as text
+        factCheckUrl = '';
+      }
+    }
+    
+    // Extract quiz topic if /quiz command is used
+    let quizTopic = '';
+    if (isQuizRequest) {
+      quizTopic = trimmed.replace('/quiz', '').trim();
+      if (!quizTopic) {
+        toast({
+          title: "Quiz topic required",
+          description: "Please specify a topic after /quiz (e.g., /quiz organic chemistry)",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+        return;
+      }
+    }
 
     // Create or get current chat ID
     let chatId = currentChatId;
@@ -1104,12 +1473,30 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
     });
     
     const currentFiles = [...uploadedFiles];
-    const currentText = trimmed;
+    let currentText = trimmed;
     setDraft("");
     setUploadedFiles([]);
     setIsLoading(true);
     setToolStatus("Thinking...");
     setStatusMessages([]); // Reset status messages for new request
+
+    // Fetch URL content if fact-check command with URL
+    let fetchedUrlContent = '';
+    if (isFactCheckCommand && factCheckUrl) {
+      setToolStatus("Fetching article content...");
+      try {
+        fetchedUrlContent = await fetchUrlContent(factCheckUrl);
+        if (fetchedUrlContent) {
+          setToolStatus("Content fetched, analyzing...");
+        } else {
+          // If fetch failed, pass URL to backend to handle
+          setToolStatus("Preparing fact-check request...");
+        }
+      } catch (error) {
+        console.error('Error fetching URL content:', error);
+        // Continue with URL - backend will handle it
+      }
+    }
 
     // Prepare messages for API
     const apiMessages = messages.map(m => {
@@ -1123,10 +1510,54 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
       return { role: m.role, content };
     });
 
+    // Modify user message for fact-check command
+    if (isFactCheckCommand && factCheckContent) {
+      if (factCheckUrl) {
+        // If URL was provided
+        if (fetchedUrlContent) {
+          // Use fetched content
+          currentText = `Please fact-check the following article content from ${factCheckUrl}:\n\n${fetchedUrlContent}\n\nAnalyze the claims and facts in this article, search the web for verification, and provide a comprehensive fact-check report with sources.`;
+        } else {
+          // Pass URL to backend
+          currentText = `Please fact-check the content from this URL: ${factCheckUrl}\n\nFetch the article content, analyze the claims and facts, search the web for verification, and provide a comprehensive fact-check report with sources.`;
+        }
+      } else {
+        // If text was provided
+        currentText = `Please fact-check the following content:\n\n${factCheckContent}\n\nAnalyze the claims and facts, search the web for verification, and provide a comprehensive fact-check report with sources.`;
+      }
+    }
+
     // Add current user message
-    const userContent = currentFiles.length > 0
+    let userContent = currentFiles.length > 0
       ? `${currentText}\n\n--- Attached Files ---\n${currentFiles.map(file => `## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\``).join('\n')}`
       : currentText;
+
+    // If /quiz command is used, modify the prompt to generate a quiz
+    if (isQuizRequest && quizTopic) {
+      userContent = `Generate a quiz on the topic: "${quizTopic}". 
+
+Please create a quiz with multiple choice questions. Format your response as follows:
+
+QUIZ_TITLE: [Title of the quiz]
+
+QUESTION 1: [Question text]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+D) [Option D]
+CORRECT: [A, B, C, or D]
+
+QUESTION 2: [Question text]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+D) [Option D]
+CORRECT: [A, B, C, or D]
+
+[Continue for more questions...]
+
+Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length > 0 ? `\n\n--- Attached Files ---\n${currentFiles.map(file => `## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\``).join('\n')}` : ''}`;
+    }
 
     apiMessages.push({ role: 'user', content: userContent });
 
@@ -1161,9 +1592,18 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
     };
 
     try {
+      // #region agent log
+      console.log('[DEBUG] Calling streamChat with researchEnabled:', researchEnabled, 'messagesCount:', apiMessages.length);
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1429',message:'Calling streamChat with researchEnabled',data:{researchEnabled,messagesCount:apiMessages.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       await streamChat({
         messages: apiMessages,
         journalTitle: journalTitle || 'Untitled',
+        isCiteCommand: isCiteCommand,
+        citeStyle: citeStyle,
+        citeContent: citeContent,
+        isFactCheckCommand: isFactCheckCommand,
+        researchEnabled: researchEnabled,
         onDelta: (chunk) => upsertAssistant(chunk),
         onStatus: (status) => {
           setStatusMessages(prev => {
@@ -1219,37 +1659,6 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
                 return updatedMessages;
               });
             }
-          } else if (isContentGenerationRequest && onInsertContent && assistantContent) {
-            // Insert content into journal
-            try {
-              onInsertContent(assistantContent);
-              setMessages((prev) => {
-                const updatedMessages = [
-                  ...prev.slice(0, -1), // Remove the last assistant message
-                  {
-                    id: id(),
-                    role: "assistant" as const,
-                    content: `Content has been added to your journal!`
-                  },
-                ];
-                // Save chat
-                if (chatId) {
-                  saveChat(chatId, chatName, updatedMessages);
-                }
-                return updatedMessages;
-              });
-              toast({
-                title: "Content added",
-                description: "The generated content has been inserted into your journal.",
-              });
-            } catch (error) {
-              console.error('Error inserting content:', error);
-              toast({
-                title: "Error",
-                description: "Failed to insert content into journal.",
-                variant: "destructive"
-              });
-            }
           } else {
             // Save final chat state after normal response completes
             setMessages((prev) => {
@@ -1289,6 +1698,9 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
         }
       });
     } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1599',message:'Outer catch block - streamChat call exception',data:{error:error instanceof Error ? error.message : String(error),errorName:error instanceof Error ? error.name : 'Unknown',stack:error instanceof Error ? error.stack : undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       setToolStatus(null);
       setStatusMessages([]);
       console.error('Error calling chat API:', error);
@@ -1313,12 +1725,12 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
     <aside
       aria-label="Chatbot"
       className={cn(
-        "w-[420px] shrink-0 border-l border-border bg-card flex flex-col overflow-hidden",
+        "w-full shrink-0 border-l border-border bg-card flex flex-col overflow-hidden h-full",
         className,
       )}
     >
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-3" ref={messagesContainerRef}>
           {messages.map((m) => (
             <div key={m.id} className="max-w-[90%] space-y-2">
@@ -1482,11 +1894,60 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
             </div>
           )}
           {/* Scroll anchor at bottom */}
-          <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} className="mt-auto" />
         </div>
       </ScrollArea>
 
-      <div className="p-3 bg-card">
+      <div className="p-3 bg-card shrink-0">
+        {/* Content Generation Buttons */}
+        <div className="mb-3 overflow-x-auto scrollbar-thin">
+          <div className="flex gap-2 w-max pb-1">
+              {[
+                { id: 'audio-overview', label: 'Audio', icon: Music, bgColor: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
+                { id: 'video-overview', label: 'Video', icon: Video, bgColor: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
+                { id: 'mind-map', label: 'Mind Map', icon: Network, bgColor: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
+                { id: 'reports', label: 'Reports', icon: FileTextIcon, bgColor: 'bg-yellow-100 dark:bg-yellow-900/30', iconColor: 'text-yellow-600 dark:text-yellow-400' },
+                { id: 'flashcards', label: 'Flashcards', icon: Layers, bgColor: 'bg-pink-100 dark:bg-pink-900/30', iconColor: 'text-pink-600 dark:text-pink-400' },
+                { id: 'quiz', label: 'Quiz', icon: HelpCircle, bgColor: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
+                { id: 'infographic', label: 'Infographic', icon: BarChart3, bgColor: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
+                { id: 'slide-deck', label: 'Slide Deck', icon: Presentation, bgColor: 'bg-yellow-100 dark:bg-yellow-900/30', iconColor: 'text-yellow-600 dark:text-yellow-400' },
+                { id: 'data-table', label: 'Data Table', icon: Table, bgColor: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
+                { id: 'calculator', label: 'Calculator', icon: Calculator, bgColor: 'bg-orange-100 dark:bg-orange-900/30', iconColor: 'text-orange-600 dark:text-orange-400' },
+              ].map((item) => {
+                const IconComponent = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={cn(
+                      "relative flex items-center gap-2 px-3 py-2 rounded-lg",
+                      "min-w-[100px]",
+                      item.bgColor,
+                      "hover:opacity-80 transition-opacity",
+                      "border border-transparent hover:border-gray-300 dark:hover:border-gray-600"
+                    )}
+                    onClick={() => {
+                      // Handle button click - can be implemented later
+                      console.log(`Clicked ${item.label}`);
+                    }}
+                  >
+                    {item.isBeta && (
+                      <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-black text-white text-[10px] font-semibold rounded">
+                        BETA
+                      </span>
+                    )}
+                    <div className="relative flex items-center justify-center flex-shrink-0">
+                      <IconComponent className={cn("w-4 h-4", item.iconColor)} />
+                    </div>
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap leading-tight">
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+
         {/* Uploaded Files Display */}
         {uploadedFiles.length > 0 && (
           <div className="mb-3 overflow-x-auto">
@@ -1541,86 +2002,224 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
             send(draft);
           }}
         >
-          <div className="flex-1 relative" ref={textareaRef}>
-            <LinkTextarea
-              value={draft}
-              onChange={(value) => {
-                setDraft(value);
-                // Detect "/" for slash commands
-                const lastSlashIndex = value.lastIndexOf('/');
-                if (lastSlashIndex !== -1) {
-                  // Check if there's a space after the slash (command completed)
-                  const afterSlash = value.substring(lastSlashIndex + 1);
-                  const hasSpace = afterSlash.includes(' ');
-                  
-                  if (!hasSpace && textareaRef.current) {
-                    // Get cursor position
-                    const rect = textareaRef.current.getBoundingClientRect();
-                    const position = {
-                      top: rect.bottom + 8,
-                      left: rect.left
-                    };
-                    
-                    setSlashCommand({
-                      isOpen: true,
-                      filter: afterSlash,
-                      position
-                    });
-                  } else {
-                    setSlashCommand(null);
-                  }
-                } else {
-                  setSlashCommand(null);
-                }
-              }}
-              placeholder={isLoading ? "Waiting for response..." : "Ask about this journal…"}
-              className="min-h-[44px] max-h-32 resize-none pr-20 text-sm rounded-[15px] px-4 py-3 bg-gray-100 dark:bg-[#333333]"
-              disabled={isLoading}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !isLoading) {
-                  if (slashCommand?.isOpen) {
-                    // If menu is open, don't send - let user select command
-                    return;
-                  }
-                  e.preventDefault();
-                  send(draft);
-                } else if (e.key === "Escape" && slashCommand?.isOpen) {
-                  setSlashCommand(null);
-                }
-              }}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".txt,.md,.js,.ts,.json,.css,.html,.xml,.pdf,.doc,.docx,.ppt,.pptx,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="absolute right-10 bottom-1 h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              title="Upload files"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-            <button
-              type="submit"
-              disabled={isLoading || (!draft.trim() && uploadedFiles.length === 0)}
-              className="absolute right-1 bottom-1 flex items-center justify-center w-8 h-8 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Send message"
-            >
-              <ArrowUp className="w-5 h-5" />
-            </button>
+          <div className="flex-1 relative flex flex-col min-h-[80px]" ref={textareaRef}>
+            {/* Input container with @ Add context inside */}
+            <div className="flex flex-col bg-gray-100 dark:bg-[#333333] rounded-[15px] px-4 py-3 min-h-[80px]">
+              {/* @ Add context button and selected journal chips - inside input box */}
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <DropdownMenu open={isContextDropdownOpen} onOpenChange={setIsContextDropdownOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <button 
+                      type="button"
+                      className="flex items-center justify-center h-8 px-3 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-[#F3FAF9] hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm font-medium whitespace-nowrap"
+                      title="Add context"
+                    >
+                      @ Add context
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent 
+                    className="w-80 p-0" 
+                    align="start"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                    {/* Search input */}
+                    <div className="p-2 border-b">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search journals..."
+                          value={journalSearchQuery}
+                          onChange={(e) => setJournalSearchQuery(e.target.value)}
+                          className="pl-8"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    {/* Journal list */}
+                    <ScrollArea className="max-h-[300px]">
+                      {filteredJournals.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-muted-foreground">
+                          {journalSearchQuery.trim() ? "No journals found" : "No journals available"}
+                        </div>
+                      ) : (
+                        <div className="p-1">
+                          {filteredJournals.map((journal) => {
+                            const isSelected = selectedJournalIds.has(journal.id);
+                            return (
+                              <DropdownMenuItem
+                                key={journal.id}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleJournalSelect(journal);
+                                }}
+                                className="flex items-center gap-2 cursor-pointer"
+                                onSelect={(e) => e.preventDefault()}
+                              >
+                                <div className="flex items-center justify-center w-4 h-4">
+                                  {isSelected && (
+                                    <Check className="h-4 w-4 text-primary" />
+                                  )}
+                                </div>
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                <span className="flex-1 truncate">{journal.title}</span>
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Selected journal chips */}
+                {selectedJournals.map((journal) => (
+                  <div
+                    key={journal.id}
+                    className="flex items-center gap-1.5 h-8 px-3 pr-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-[#F3FAF9] text-sm font-medium whitespace-nowrap"
+                  >
+                    <span>{journal.title}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleJournalSelect(journal);
+                      }}
+                      className="flex items-center justify-center w-4 h-4 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      aria-label={`Remove ${journal.title}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Input row with plus icon and textarea */}
+              <div className="flex items-start flex-1 relative pt-1 gap-1">
+                {/* Plus Icon - File Upload */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".txt,.md,.js,.ts,.json,.css,.html,.xml,.pdf,.doc,.docx,.ppt,.pptx,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <button 
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  className="flex items-center justify-center w-4 h-4 text-gray-700 dark:text-[#F3FAF9] hover:text-gray-900 dark:hover:text-[#F3FAF9] transition-colors mt-0.5 flex-shrink-0"
+                  title="Upload file"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+
+                {/* Textarea */}
+                <LinkTextarea
+                  value={draft}
+                  onChange={(value) => {
+                    setDraft(value);
+                    // Detect "/" for slash commands
+                    const lastSlashIndex = value.lastIndexOf('/');
+                    if (lastSlashIndex !== -1) {
+                      // Check if there's a space after the slash (command completed)
+                      const afterSlash = value.substring(lastSlashIndex + 1);
+                      const hasSpace = afterSlash.includes(' ');
+                      
+                      // Check if user typed /cite followed by space (show citation style menu)
+                      if (afterSlash.trim() === 'cite' && hasSpace && textareaRef.current && !citationStyleMenu?.isOpen) {
+                        const rect = textareaRef.current.getBoundingClientRect();
+                        setCitationStyleMenu({
+                          isOpen: true,
+                          position: {
+                            top: rect.bottom + 8,
+                            left: rect.left
+                          }
+                        });
+                        setSlashCommand(null);
+                      } else if (!hasSpace && textareaRef.current) {
+                        // Get cursor position
+                        const rect = textareaRef.current.getBoundingClientRect();
+                        const position = {
+                          top: rect.bottom + 8,
+                          left: rect.left
+                        };
+                        
+                        setSlashCommand({
+                          isOpen: true,
+                          filter: afterSlash,
+                          position
+                        });
+                        // Close citation style menu if slash command menu opens
+                        if (citationStyleMenu?.isOpen) {
+                          setCitationStyleMenu(null);
+                        }
+                      } else {
+                        setSlashCommand(null);
+                        // Close citation style menu if space is added after /cite [style]
+                        if (citationStyleMenu?.isOpen && value.match(/\/cite\s+\w+\s/)) {
+                          setCitationStyleMenu(null);
+                        }
+                      }
+                    } else {
+                      setSlashCommand(null);
+                      setCitationStyleMenu(null);
+                    }
+                  }}
+                  placeholder={isLoading ? "Waiting for response..." : "Ask about this journal…"}
+                  className="flex-1 min-h-[44px] max-h-32 resize-none pr-20 pl-0 text-sm bg-transparent text-gray-900 dark:text-[#F3FAF9] placeholder:text-gray-500 dark:placeholder:text-[#F3FAF9]/60 focus:outline-none focus:ring-0"
+                  disabled={isLoading}
+                  slashCommands={CHAT_SLASH_COMMANDS.map(cmd => cmd.command)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !isLoading) {
+                      if (slashCommand?.isOpen) {
+                        // If menu is open, don't send - let user select command
+                        return;
+                      }
+                      e.preventDefault();
+                      send(draft);
+                    } else if (e.key === "Escape" && slashCommand?.isOpen) {
+                      setSlashCommand(null);
+                    }
+                  }}
+                />
+
+                {/* Send Button (upward arrow) */}
+                <button
+                  type="submit"
+                  disabled={isLoading || (!draft.trim() && uploadedFiles.length === 0)}
+                  className="absolute right-1 top-[10px] flex items-center justify-center w-5 h-5 rounded-full bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Send message"
+                >
+                  <ArrowUp className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Research Switch - positioned below input row */}
+              <div className="flex items-center gap-1.5 mt-2">
+                <Switch
+                  checked={researchEnabled}
+                  onCheckedChange={(checked) => {
+                    // #region agent log
+                    console.log('[DEBUG] Research switch toggled:', { checked, previousValue: researchEnabled });
+                    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ChatbotSidebar.tsx:1932',message:'Research switch toggled',data:{checked,previousValue:researchEnabled},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                    // #endregion
+                    setResearchEnabled(checked);
+                  }}
+                  className="h-4 w-7 [&>span]:h-3 [&>span]:w-3 [&>span]:data-[state=checked]:translate-x-3"
+                />
+                <label className="text-sm font-medium text-gray-700 dark:text-[#F3FAF9] whitespace-nowrap">
+                  Research
+                </label>
+              </div>
+            </div>
           </div>
         </form>
         
         {/* Slash Command Menu */}
-        {slashCommand?.isOpen && (
+        {slashCommand?.isOpen && !citationStyleMenu?.isOpen && (
           <ChatSlashCommandMenu
             position={slashCommand.position}
             filter={slashCommand.filter}
@@ -1632,6 +2231,43 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
                 const newText = `${beforeSlash}/${cmd.command} `;
                 setDraft(newText);
                 setSlashCommand(null);
+                
+                // If cite command selected, show citation style menu
+                if (cmd.command === 'cite' && textareaRef.current) {
+                  const rect = textareaRef.current.getBoundingClientRect();
+                  setCitationStyleMenu({
+                    isOpen: true,
+                    position: {
+                      top: rect.bottom + 8,
+                      left: rect.left
+                    }
+                  });
+                } else {
+                  // Focus back on textarea contentEditable
+                  setTimeout(() => {
+                    const contentEditable = textareaRef.current?.querySelector('[contenteditable="true"]') as HTMLElement;
+                    contentEditable?.focus();
+                  }, 0);
+                }
+              }
+            }}
+            onClose={() => setSlashCommand(null)}
+          />
+        )}
+
+        {/* Citation Style Menu */}
+        {citationStyleMenu?.isOpen && (
+          <CitationStyleMenu
+            position={citationStyleMenu.position}
+            onSelect={(style) => {
+              const currentText = draft;
+              // Replace /cite with /cite [style]
+              const citeMatch = currentText.match(/\/cite\s*$/);
+              if (citeMatch) {
+                const beforeCite = currentText.substring(0, citeMatch.index);
+                const newText = `${beforeCite}/cite ${style.value.toLowerCase()} `;
+                setDraft(newText);
+                setCitationStyleMenu(null);
                 // Focus back on textarea contentEditable
                 setTimeout(() => {
                   const contentEditable = textareaRef.current?.querySelector('[contenteditable="true"]') as HTMLElement;
@@ -1639,7 +2275,7 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
                 }, 0);
               }
             }}
-            onClose={() => setSlashCommand(null)}
+            onClose={() => setCitationStyleMenu(null)}
           />
         )}
       </div>
