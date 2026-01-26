@@ -221,7 +221,7 @@ export const Editor = ({
   useEffect(() => {
     const quill = quillRef.current?.getEditor();
     if (quill) {
-      const toolbar = quill.getModule('toolbar');
+      const toolbar = quill.getModule('toolbar') as { container?: HTMLElement } | null;
       const toolbarElement = toolbar?.container;
       
       if (toolbarElement) {

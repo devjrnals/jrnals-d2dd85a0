@@ -152,7 +152,7 @@ export default function Settings() {
         if (uploadError.message.includes('Bucket not found') || 
             uploadError.message.includes('not found') ||
             uploadError.message.includes('does not exist') ||
-            uploadError.statusCode === '404' ||
+            (uploadError as any).statusCode === '404' ||
             uploadError.message.includes('The resource was not found')) {
           throw new Error('Storage bucket not configured. The database migration needs to be run. Please contact support or run: supabase migration up');
         }

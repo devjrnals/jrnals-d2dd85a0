@@ -29,10 +29,10 @@ export function TranscribeNotes({ open, onClose, onAddToJournal }: TranscribeNot
 
   // Check for browser support
   const hasSpeechRecognition = typeof window !== "undefined" && 
-    (window.SpeechRecognition || (window as any).webkitSpeechRecognition);
+    ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
   
   const SpeechRecognition = hasSpeechRecognition 
-    ? (window.SpeechRecognition || (window as any).webkitSpeechRecognition)
+    ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
     : null;
 
   useEffect(() => {

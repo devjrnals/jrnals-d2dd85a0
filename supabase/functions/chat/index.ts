@@ -314,7 +314,7 @@ serve(async (req) => {
               .from('journals')
               .select('content, title')
               .eq('id', journalId)
-              .eq('user_id', user.id)
+              .eq('user_id', user!.id)
               .single();
 
             if (journalError || !journalData) {
@@ -379,7 +379,7 @@ serve(async (req) => {
               .from('journals')
               .select('content')
               .eq('id', journalId)
-              .eq('user_id', user.id)
+              .eq('user_id', user!.id)
               .single();
 
             if (currentError || !currentJournal) {
@@ -450,7 +450,7 @@ serve(async (req) => {
               .from('journals')
               .update({ content: updatedContent })
               .eq('id', journalId)
-              .eq('user_id', user.id);
+              .eq('user_id', user!.id);
 
             if (updateError) {
               return { result: `Error: Failed to insert content into journal: ${updateError.message}` };

@@ -2138,7 +2138,7 @@ ${journalContext}${uploadedFiles.length > 0 ? `\n\n--- Attached Files ---\n${upl
                         }
                       }}
                     >
-                      {item.isBeta && (
+                      {'isBeta' in item && item.isBeta && (
                         <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-black text-white text-[10px] font-semibold rounded">
                           BETA
                         </span>
@@ -2221,7 +2221,7 @@ ${journalContext}${uploadedFiles.length > 0 ? `\n\n--- Attached Files ---\n${upl
             send(draft);
           }}
         >
-          <div className="flex-1 relative flex flex-col min-h-[80px]" ref={textareaRef}>
+          <div className="flex-1 relative flex flex-col min-h-[80px]" ref={textareaRef as unknown as React.RefObject<HTMLDivElement>}>
             {/* Input container with @ Add context inside */}
             <div className="flex flex-col bg-gray-100 dark:bg-[#333333] rounded-[15px] px-4 py-3 min-h-[80px]">
               {/* @ Add context button and selected journal chips - inside input box */}
