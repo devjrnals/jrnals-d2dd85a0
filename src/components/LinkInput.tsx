@@ -68,7 +68,7 @@ export function LinkInput({
       } else {
         let i = node.childNodes.length;
         while (i--) {
-          nodeStack.push(node.childNodes[i]);
+          nodeStack.push(node.childNodes[i] as HTMLDivElement);
         }
       }
     }
