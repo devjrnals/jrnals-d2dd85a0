@@ -60,18 +60,10 @@ const FadeInSection = ({
   );
 };
 
-// Carousel component with auto-advance and progress bar
-const ImageCarousel = () => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [progress, setProgress] = useState(0);
+// Learning Sections Component - Three sections similar to NotebookLM
+const LearningSections = () => {
   const [isVisible, setIsVisible] = useState(false);
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const images = [
-    { id: 1, src: "/carousel/gif1.gif", type: "gif", alt: "Carousel GIF 1" },
-    { id: 2, src: "/carousel/gif2.gif", type: "gif", alt: "Carousel GIF 2" },
-    { id: 3, src: "/carousel/img1.png", type: "image", alt: "Carousel Image 1" },
-  ];
-  const duration = 8000; // 8 seconds per image
+  const sectionRef = useRef<HTMLDivElement>(null);
 
   // Intersection Observer for scroll-triggered fade-in
   useEffect(() => {
@@ -83,131 +75,148 @@ const ImageCarousel = () => {
           }
         });
       },
-      { threshold: 0.2 } // Trigger when 20% of the element is visible
+      { threshold: 0.2 }
     );
 
-    if (carouselRef.current) {
-      observer.observe(carouselRef.current);
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
     }
 
     return () => {
-      if (carouselRef.current) {
-        observer.unobserve(carouselRef.current);
+      if (sectionRef.current) {
+        observer.unobserve(sectionRef.current);
       }
     };
   }, []);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
-          return 0;
-        }
-        return prev + 1.25; // Increment by 1.25% every 100ms (100ms * 80 = 8000ms)
-      });
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [images.length, currentIndex]);
-
-  // Reset progress when image changes
-  useEffect(() => {
-    setProgress(0);
-  }, [currentIndex]);
-
-  const goToNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % images.length);
-    setProgress(0);
-  };
-
-  const goToPrevious = () => {
-    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
-    setProgress(0);
-  };
-
-  const goToSlide = (index: number) => {
-    setCurrentIndex(index);
-    setProgress(0);
-  };
+  const sections = [
+    {
+      title: "Upload your sources",
+      icon: FileText,
+      description: "Upload PDFs, websites, YouTube videos, audio files, Google Docs, Google Slides and more, and Jrnals will summarize them and make interesting connections between topics, all powered by the latest version of AI's multimodal understanding capabilities."
+    },
+    {
+      title: "Chat with your notes",
+      icon: MessageSquare,
+      description: "Ask questions about your uploaded content and get instant answers. Jrnals understands the context of all your materials and can help you study, review, and learn more effectively."
+    },
+    {
+      title: "Learn and practice",
+      icon: Brain,
+      description: "Generate practice questions, flashcards, and study guides from your notes. Jrnals acts as your personal tutor, helping you master the material through interactive learning."
+    }
+  ];
 
   return (
     <div 
-      ref={carouselRef}
+      ref={sectionRef}
       className={cn(
-        "relative w-full max-w-6xl mx-auto transition-all duration-[1200ms] ease-out",
+        "relative w-full max-w-7xl mx-auto transition-all duration-[1200ms] ease-out",
         isVisible 
           ? "opacity-100 translate-y-0" 
           : "opacity-0 translate-y-12"
       )}
     >
-      {/* Title and Subtitle */}
-      <div className="text-center mb-8">
-        <h2 className="text-4xl md:text-5xl font-medium text-gray-900 mb-2">Jrnals is for Learning</h2>
-        <p className="text-lg text-gray-600 mb-6">A learning partner in every journal</p>
-        
-        {/* Carousel Navigation */}
-        <div className="flex items-center justify-center gap-4 mb-4">
-          <button
-            onClick={goToPrevious}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            aria-label="Previous image"
-          >
-            <ChevronLeft className="h-5 w-5 text-gray-700" />
-          </button>
-          <div className="flex gap-2">
-            {images.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => goToSlide(index)}
-                className={cn(
-                  "w-2 h-2 rounded-full transition-all",
-                  index === currentIndex ? "bg-gray-900 w-8" : "bg-gray-400"
-                )}
-                aria-label={`Go to slide ${index + 1}`}
-              />
-            ))}
-          </div>
-          <button
-            onClick={goToNext}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            aria-label="Next image"
-          >
-            <ChevronRight className="h-5 w-5 text-gray-700" />
-          </button>
-        </div>
-        
-        <p className="text-base text-gray-600">An extra set of eyes to always hit your quality bar</p>
+      {/* Title */}
+      <div className="text-center mb-12">
+        <h2 className="text-4xl md:text-5xl font-medium text-gray-900 mb-6">Jrnals is for Learning</h2>
       </div>
 
-      {/* Image Container */}
-      <div className="relative rounded-xl shadow-2xl overflow-hidden bg-white">
-        <div className="aspect-video bg-gray-100 flex items-center justify-center relative">
-          <img
-            src={images[currentIndex].src}
-            alt={images[currentIndex].alt}
-            className="w-full h-full object-contain"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              const parent = target.parentElement;
-              if (parent) {
-                parent.innerHTML = `
-                  <div class="text-gray-400 text-lg">Image not found: ${images[currentIndex].src}</div>
-                `;
-              }
-            }}
-          />
-          
-          {/* Progress Bar */}
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200">
-            <div
-              className="h-full bg-gray-900 transition-all duration-100 ease-linear"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
+      {/* Three Sections */}
+      <div className="space-y-32">
+        {sections.map((section, index) => {
+          const IconComponent = section.icon;
+          return (
+            <div 
+              key={index}
+              className="flex flex-col lg:flex-row items-start gap-8 lg:gap-12"
+            >
+              {/* Left Side - Text Content */}
+              <div className="flex-1 lg:max-w-md">
+                <div className="flex items-center gap-3 mb-4">
+                  <IconComponent className="h-6 w-6 text-gray-900" />
+                  <h3 className="text-2xl md:text-3xl font-medium text-gray-900">
+                    {section.title}
+                  </h3>
+                </div>
+                <p className="text-base text-gray-600 leading-relaxed">
+                  {section.description}
+                </p>
+              </div>
+
+              {/* Right Side - Image Placeholder */}
+              <div className="flex-1 lg:max-w-2xl">
+                <div className="bg-gray-900 rounded-xl p-6 shadow-2xl">
+                  <div className="aspect-video rounded-lg flex items-center justify-center">
+                    <div className="text-center text-gray-400">
+                      <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm font-medium">Image Placeholder</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
+    </div>
+  );
+};
+
+// Draggable scroll component
+const DraggableScroll = ({ children }: { children: React.ReactNode }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!scrollRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - scrollRef.current.offsetLeft);
+    setScrollLeft(scrollRef.current.scrollLeft);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !scrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed multiplier
+    scrollRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
+
+  return (
+    <div
+      ref={scrollRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
+      className={cn(
+        "flex overflow-x-auto pb-4 px-8 cursor-grab active:cursor-grabbing",
+        "scrollbar-hide"
+      )}
+      style={{
+        gap: '100px',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none', // Firefox
+        msOverflowStyle: 'none', // IE and Edge
+      }}
+    >
+      <style>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none; /* Chrome, Safari, Opera */
+        }
+      `}</style>
+      {children}
     </div>
   );
 };
@@ -722,53 +731,40 @@ export const Landing = () => {
         </div>
       </section>
 
-      {/* Image Carousel Section */}
+      {/* Learning Sections */}
       <section id="first-learning-section" className="container px-8 py-20">
-        <ImageCarousel />
+        <LearningSections />
       </section>
 
       {/* Feature Cards Section */}
       <FadeInSection className="w-full py-16">
         <div className="w-full">
-          <div 
-            className="flex overflow-x-auto pb-4 px-8"
-            style={{
-              gap: '100px',
-              WebkitOverflowScrolling: 'touch',
-              scrollbarWidth: 'thin',
-              scrollbarColor: '#d1d5db transparent'
-            }}
-          >
+          <DraggableScroll>
             {[
               {
-                title: "/quiz",
+                title: "Quiz",
                 description: "Instantly generates exam-style questions from your notes and topics.",
                 borderColor: "border-red-500"
               },
               {
-                title: "/flashcards",
+                title: "Flashcards",
                 description: "Turns any content into smart spaced-repetition flashcards.",
                 borderColor: "border-yellow-500"
               },
               {
-                title: "/calculator",
+                title: "Calculator",
                 description: "Adds a Desmos calculator into the journal and graphs equations.",
                 borderColor: "border-pink-500"
               },
               {
-                title: "/fact-check",
-                description: "Verifies statements using reliable sources and flags inaccuracies.",
+                title: "Research",
+                description: "Searches the web for reliable sources to verify and fact-check information.",
                 borderColor: "border-blue-500"
               },
               {
-                title: "/mark",
-                description: "Grades responses using rubric-style feedback and improvement tips.",
+                title: "Data Table",
+                description: "Grades responses with detailed rubric-based feedback and improvement suggestions.",
                 borderColor: "border-purple-500"
-              },
-              {
-                title: "/plan",
-                description: "Builds a structured plan based on the coursework.",
-                borderColor: "border-green-500"
               }
             ].map((feature, index) => {
               const isTopRight = index % 2 === 1; // Odd indices have container at top right
@@ -790,7 +786,7 @@ export const Landing = () => {
                   
                   {/* Image Placeholder Container */}
                   <div className={`relative z-10 rounded-2xl bg-white overflow-hidden ${isTopRight ? 'mt-0' : 'mb-[-50px]'}`} style={{ aspectRatio: '16/10', width: '100%' }}>
-                    {feature.title === '/calculator' ? (
+                    {feature.title === 'Calculator' ? (
                       <img 
                         src="/features/calc-ss.png" 
                         alt="Calculator feature screenshot" 
@@ -812,7 +808,7 @@ export const Landing = () => {
                           }
                         }}
                       />
-                    ) : feature.title === '/flashcards' ? (
+                    ) : feature.title === 'Flashcards' ? (
                       <img 
                         src="/features/flashcard-ss.png" 
                         alt="Flashcards feature screenshot" 
@@ -834,7 +830,7 @@ export const Landing = () => {
                           }
                         }}
                       />
-                    ) : feature.title === '/quiz' ? (
+                    ) : feature.title === 'Quiz' ? (
                       <img 
                         src="/features/quiz-ss.png" 
                         alt="Quiz feature screenshot" 
@@ -882,7 +878,7 @@ export const Landing = () => {
                 </div>
               );
             })}
-          </div>
+          </DraggableScroll>
         </div>
       </FadeInSection>
 

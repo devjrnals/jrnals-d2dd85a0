@@ -26,12 +26,26 @@ let savedSelectionRange: Range | null = null;
 // Export function to save selection from Editor component
 export const saveSelectionForToolbar = () => {
   const selection = window.getSelection();
+  // #region agent log
+  const hasSelection = selection && selection.rangeCount > 0;
+  fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:27',message:'saveSelectionForToolbar called',data:{hasSelection},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   if (selection && selection.rangeCount > 0) {
     try {
       savedSelectionRange = selection.getRangeAt(0).cloneRange();
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:33',message:'Selection saved',data:{startOffset:savedSelectionRange.startOffset,endOffset:savedSelectionRange.endOffset,collapsed:savedSelectionRange.collapsed},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     } catch (e) {
       savedSelectionRange = null;
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:36',message:'Failed to save selection',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     }
+  } else {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:39',message:'No selection to save',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
   }
 };
 
@@ -106,7 +120,7 @@ export const FormattingToolbar = ({
       const toolbarHeight = toolbarRect.height || 40; // Fallback height
       const toolbarWidth = toolbarRect.width || 300; // Fallback width
 
-      let top = position.top - toolbarHeight - 2; // Default: above selection (reduced gap to 2px)
+      let top = position.top - toolbarHeight + 2; // Default: above selection (slight overlap of 2px for closer appearance)
       let left = position.left;
 
       // Check if toolbar goes off right edge
@@ -121,12 +135,12 @@ export const FormattingToolbar = ({
 
       // Check if toolbar goes off top edge - flip below selection
       if (top < padding) {
-        top = position.top + 4; // Position below selection (reduced gap to 4px)
+        top = position.top - 2; // Position below selection (slight overlap of 2px for closer appearance)
       }
 
       // Check if toolbar goes off bottom edge - ensure it's above
       if (top + toolbarHeight > viewportHeight - padding) {
-        top = Math.max(padding, position.top - toolbarHeight - 2);
+        top = Math.max(padding, position.top - toolbarHeight + 2);
       }
 
       setAdjustedPosition({ top, left });
@@ -134,6 +148,12 @@ export const FormattingToolbar = ({
   }, [position]);
 
   const handleFormat = (action: FormattingAction, value?: string) => {
+    // #region agent log
+    const selectionBefore = window.getSelection();
+    const hasSelectionBefore = selectionBefore && selectionBefore.rangeCount > 0;
+    const savedRangeExists = !!savedSelectionRange;
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:136',message:'handleFormat entry',data:{action,value,hasSelectionBefore,savedRangeExists},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     // Use the saved selection range (saved when toolbar appeared)
     const savedRange = savedSelectionRange;
     const selection = window.getSelection();
@@ -143,24 +163,59 @@ export const FormattingToolbar = ({
     if (!rangeToRestore && selection && selection.rangeCount > 0) {
       try {
         rangeToRestore = selection.getRangeAt(0).cloneRange();
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:147',message:'Got range from current selection',data:{action,startOffset:rangeToRestore.startOffset,endOffset:rangeToRestore.endOffset,collapsed:rangeToRestore.collapsed},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
       } catch (e) {
         rangeToRestore = null;
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:150',message:'Failed to clone range from current selection',data:{action,error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
       }
     }
+    // #region agent log
+    if (rangeToRestore) {
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:155',message:'Range to restore prepared',data:{action,startOffset:rangeToRestore.startOffset,endOffset:rangeToRestore.endOffset,collapsed:rangeToRestore.collapsed,isSavedRange:rangeToRestore===savedRange},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    } else {
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:157',message:'No range to restore',data:{action},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    }
+    // #endregion
     
     // Apply format
     onFormat(action, value);
+    
+    // #region agent log
+    const selectionAfterFormat = window.getSelection();
+    const hasSelectionAfterFormat = selectionAfterFormat && selectionAfterFormat.rangeCount > 0;
+    fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:163',message:'After onFormat call',data:{action,hasSelectionAfterFormat},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     
     // Restore selection after a brief delay to allow format to apply
     if (rangeToRestore) {
       setTimeout(() => {
         try {
           const sel = window.getSelection();
+          // #region agent log
+          const hasSelectionBeforeRestore = sel && sel.rangeCount > 0;
+          fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:170',message:'Attempting selection restore',data:{action,hasSelectionBeforeRestore},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           if (sel) {
             sel.removeAllRanges();
             sel.addRange(rangeToRestore!.cloneRange());
+            // #region agent log
+            const hasSelectionAfterRestore = sel && sel.rangeCount > 0;
+            fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:174',message:'Selection restored (direct)',data:{action,hasSelectionAfterRestore,restoreSuccess:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+            // Update savedSelectionRange after successful restoration for next click
+            savedSelectionRange = rangeToRestore.cloneRange();
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:179',message:'Updated savedSelectionRange after restore',data:{action},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+            // #endregion
           }
         } catch (e) {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:184',message:'Direct restore failed, trying fallback',data:{action,error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
           // Selection might be invalid, try to find and restore it
           try {
             if (!rangeToRestore) return;
@@ -221,14 +276,29 @@ export const FormattingToolbar = ({
                 if (sel) {
                   sel.removeAllRanges();
                   sel.addRange(newRange);
+                  // #region agent log
+                  const hasSelectionAfterFallback = sel && sel.rangeCount > 0;
+                  fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:225',message:'Selection restored (fallback)',data:{action,hasSelectionAfterFallback,restoreSuccess:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                  // #endregion
+                  // Update savedSelectionRange after successful restoration for next click
+                  savedSelectionRange = newRange.cloneRange();
+                  // #region agent log
+                  fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:230',message:'Updated savedSelectionRange after fallback restore',data:{action},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                  // #endregion
                 }
               }
             }
           } catch (e2) {
-            // Ignore errors
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:237',message:'Fallback restore failed',data:{action,error:String(e2)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
           }
         }
       }, 100);
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/505803cc-574b-40ed-a9f8-e9c2e267e4a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FormattingToolbar.tsx:243',message:'No rangeToRestore, skipping restore',data:{action},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     }
   };
 
@@ -560,4 +630,5 @@ export const FormattingToolbar = ({
     </div>
   );
 };
+
 

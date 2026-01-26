@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
-import { Folder, FileText, Check, Edit, Trash2, ChevronDown, Plus, ArrowUp, List, Grid, X, MoreVertical, Pin, Search } from "lucide-react";
+import { Folder, FileText, Check, Edit, Trash2, ChevronDown, Plus, ArrowUp, List, Grid, X, MoreVertical, Pin, Search, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import { extractTextFromFile } from "@/utils/documentExtractor";
 import { LinkInput } from "@/components/LinkInput";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { TranscribeNotes } from "@/components/TranscribeNotes";
 
 type Journal = {
   id: string;
@@ -66,6 +67,7 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
   const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
   const [journalSearchQuery, setJournalSearchQuery] = useState("");
   const [selectedJournalIds, setSelectedJournalIds] = useState<Set<string>>(new Set());
+  const [transcribeOpen, setTranscribeOpen] = useState(false);
 
 
   // Store onLoadComplete in ref to prevent unnecessary re-renders
@@ -646,6 +648,42 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleAddTranscriptToJournal = async (transcript: string) => {
+    if (!user || !transcript.trim()) return;
+
+    try {
+      const title = transcript.length > 50 
+        ? transcript.substring(0, 50) + "..." 
+        : "Transcribed Notes";
+      
+      const { data, error } = await supabase
+        .from("journals")
+        .insert({ 
+          user_id: user.id, 
+          title: title,
+          content: `<p>${transcript.replace(/\n/g, '</p><p>')}</p>`
+        })
+        .select()
+        .single();
+
+      if (error) {
+        toast({ title: "Error creating journal", variant: "destructive" });
+        return;
+      }
+
+      // Navigate to the new journal
+      navigate(`/journal/${data.id}`);
+      toast({ title: "Journal created with transcription" });
+    } catch (error) {
+      console.error("Error creating journal with transcript:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create journal.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleCreateFolder = async () => {
     if (!user) return;
 
@@ -966,6 +1004,17 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
                 title="Upload file"
               >
                 <Plus className="w-5 h-5" />
+              </button>
+              {/* Microphone Icon - Transcribe Notes */}
+              <button 
+                onClick={() => {
+                  console.log("Transcribe button clicked");
+                  setTranscribeOpen(true);
+                }}
+                className="flex items-center justify-center w-6 h-6 mr-3 text-sidebar-accent-foreground dark:text-[#F3FAF9] hover:text-sidebar-foreground dark:hover:text-[#F3FAF9] transition-colors"
+                title="Transcribe notes"
+              >
+                <Mic className="w-5 h-5" />
               </button>
 
               {/* Input Field */}
@@ -1414,6 +1463,12 @@ export const Home = ({ onLoadComplete }: HomeProps) => {
           if (kind === "folder") return deleteFolder(id);
           if (kind === "journal") return deleteJournal(id);
         }}
+      />
+
+      <TranscribeNotes
+        open={transcribeOpen}
+        onClose={() => setTranscribeOpen(false)}
+        onAddToJournal={handleAddTranscriptToJournal}
       />
     </div>
   );

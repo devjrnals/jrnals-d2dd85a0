@@ -325,6 +325,41 @@ All colors MUST be HSL.
     animation: thinking-glow-dark 2s ease-in-out infinite;
   }
 
+  /* Flashcard generating glow animation */
+  @keyframes flashcard-glow {
+    0%, 100% {
+      text-shadow: 0 0 8px rgba(236, 72, 153, 0.6),
+                   0 0 16px rgba(236, 72, 153, 0.4),
+                   0 0 24px rgba(236, 72, 153, 0.3);
+    }
+    50% {
+      text-shadow: 0 0 12px rgba(236, 72, 153, 0.9),
+                   0 0 24px rgba(236, 72, 153, 0.6),
+                   0 0 36px rgba(236, 72, 153, 0.4);
+    }
+  }
+
+  @keyframes flashcard-glow-dark {
+    0%, 100% {
+      text-shadow: 0 0 8px rgba(244, 114, 182, 0.6),
+                   0 0 16px rgba(244, 114, 182, 0.4),
+                   0 0 24px rgba(244, 114, 182, 0.3);
+    }
+    50% {
+      text-shadow: 0 0 12px rgba(244, 114, 182, 0.9),
+                   0 0 24px rgba(244, 114, 182, 0.6),
+                   0 0 36px rgba(244, 114, 182, 0.4);
+    }
+  }
+
+  .generating-flashcards {
+    animation: flashcard-glow 2s ease-in-out infinite;
+  }
+
+  .dark .generating-flashcards {
+    animation: flashcard-glow-dark 2s ease-in-out infinite;
+  }
+
   @keyframes fadeIn {
     from {
       opacity: 0;

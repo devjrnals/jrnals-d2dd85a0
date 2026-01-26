@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { SendHorizontal, Upload, PanelLeftClose, Share2, Edit, ChevronDown, Search, Plus, BookPlus, FileText, X, ArrowUp, Check, Music, Video, Network, FileText as FileTextIcon, Layers, HelpCircle, BarChart3, Presentation, Table, Calculator } from "lucide-react";
+import { SendHorizontal, Upload, PanelLeftClose, Share2, Edit, ChevronDown, Search, Plus, BookPlus, FileText, X, ArrowUp, Check, Music, Video, Network, FileText as FileTextIcon, Layers, HelpCircle, BarChart3, Presentation, Table, Calculator, Mic } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -20,6 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { extractTextFromFile } from "@/utils/documentExtractor";
 import { LinkTextarea } from "@/components/LinkTextarea";
 import { useAuth } from "@/hooks/useAuth";
+import { TranscribeNotes } from "@/components/TranscribeNotes";
 
 // Get Supabase URL with fallback
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://xfbxmheoblotlhpveugv.supabase.co";
@@ -548,6 +549,8 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
   const slashCommandRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [researchEnabled, setResearchEnabled] = useState(false);
+  const [selectedContentType, setSelectedContentType] = useState<string | null>(null); // 'flashcards', 'quiz', etc.
+  const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
   
   // @ Add context state
   const [isContextDropdownOpen, setIsContextDropdownOpen] = useState(false);
@@ -555,6 +558,7 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
   const [selectedJournalIds, setSelectedJournalIds] = useState<Set<string>>(new Set());
   const [availableJournals, setAvailableJournals] = useState<Array<{ id: string; title: string }>>([]);
   const { user } = useAuth();
+  const [transcribeOpen, setTranscribeOpen] = useState(false);
   
   // Keep ref in sync with prop
   useEffect(() => {
@@ -1348,9 +1352,11 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
     const trimmed = text.trim();
     if ((!trimmed && uploadedFiles.length === 0) || isLoading) return;
 
-    // Detect slash commands
-    const isQuizRequest = trimmed.startsWith('/quiz');
-    const isFlashcardsRequest = trimmed.toLowerCase().includes("create flashcards on") || trimmed.toLowerCase().includes("flashcards on");
+    // Detect slash commands or selected content type
+    const isQuizRequest = trimmed.startsWith('/quiz') || selectedContentType === 'quiz';
+    const isFlashcardsRequest = trimmed.toLowerCase().includes("create flashcards on") || 
+                                trimmed.toLowerCase().includes("flashcards on") ||
+                                selectedContentType === 'flashcards';
     const isContentGenerationRequest = 
       trimmed.toLowerCase().includes("create structured notes") ||
       trimmed.toLowerCase().includes("create notes") ||
@@ -1409,10 +1415,14 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
       }
     }
     
-    // Extract quiz topic if /quiz command is used
+    // Extract quiz topic if /quiz command is used or quiz button is selected
     let quizTopic = '';
     if (isQuizRequest) {
-      quizTopic = trimmed.replace('/quiz', '').trim();
+      if (selectedContentType === 'quiz') {
+        quizTopic = trimmed.trim();
+      } else {
+        quizTopic = trimmed.replace('/quiz', '').trim();
+      }
       if (!quizTopic) {
         toast({
           title: "Quiz topic required",
@@ -1422,6 +1432,15 @@ export function ChatbotSidebar({ journalTitle, journalId, className, onQuizGener
         setIsLoading(false);
         return;
       }
+    }
+
+    // Extract flashcard topic if flashcard button is selected
+    let flashcardTopic = '';
+    if (isFlashcardsRequest && selectedContentType === 'flashcards') {
+      // If user typed something, use it; otherwise we'll use journal content
+      flashcardTopic = trimmed.trim();
+      // Set generating state
+      setIsGeneratingFlashcards(true);
     }
 
     // Create or get current chat ID
@@ -1559,6 +1578,25 @@ CORRECT: [A, B, C, or D]
 Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length > 0 ? `\n\n--- Attached Files ---\n${currentFiles.map(file => `## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\``).join('\n')}` : ''}`;
     }
 
+    // If flashcard button is selected, modify the prompt to generate flashcards
+    if (isFlashcardsRequest && selectedContentType === 'flashcards' && flashcardTopic) {
+      userContent = `Create flashcards on: "${flashcardTopic}". Generate exactly 8 flashcards that cover the key concepts. Format your response as follows:
+
+FLASHCARDS_TITLE: [Brief title for the flashcards]
+
+CARD 1:
+FRONT: [Question or term]
+BACK: [Answer or definition]
+
+CARD 2:
+FRONT: [Question or term]
+BACK: [Answer or definition]
+
+[etc. for 8 cards]
+
+Use the provided files if any to make flashcards more relevant and accurate.${currentFiles.length > 0 ? `\n\n--- Attached Files ---\n${currentFiles.map(file => `## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\``).join('\n')}` : ''}`;
+    }
+
     apiMessages.push({ role: 'user', content: userContent });
 
     let assistantContent = "";
@@ -1623,13 +1661,14 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
             const quizData = parseQuizResponse(assistantContent);
             if (quizData && onQuizGenerated) {
               onQuizGenerated(quizData);
+              setSelectedContentType(null); // Deselect button after generation
               setMessages((prev) => {
                 const updatedMessages = [
                   ...prev.slice(0, -1), // Remove the last assistant message
                   {
                     id: id(),
                     role: "assistant" as const,
-                    content: `Quiz generated! Check your journal to start taking the quiz.`
+                    content: `✅ Added to journal! Your quiz has been generated and added to your journal.`
                   },
                 ];
                 // Save chat
@@ -1643,13 +1682,15 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
             const flashcardsData = parseFlashcardsResponse(assistantContent);
             if (flashcardsData && onFlashcardsGenerated) {
               onFlashcardsGenerated(flashcardsData);
+              setIsGeneratingFlashcards(false);
+              setSelectedContentType(null); // Deselect button after generation
               setMessages((prev) => {
                 const updatedMessages = [
                   ...prev.slice(0, -1), // Remove the last assistant message
                   {
                     id: id(),
                     role: "assistant" as const,
-                    content: `Flashcards generated! Check your journal to start studying.`
+                    content: `✅ Added to journal! Your flashcards have been generated and added to your journal.`
                   },
                 ];
                 // Save chat
@@ -1658,6 +1699,8 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
                 }
                 return updatedMessages;
               });
+            } else {
+              setIsGeneratingFlashcards(false);
             }
           } else {
             // Save final chat state after normal response completes
@@ -1676,6 +1719,7 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
         onError: (error) => {
           setToolStatus(null);
           setStatusMessages([]);
+          setIsGeneratingFlashcards(false);
           toast({
             title: "Error",
             description: error,
@@ -1703,6 +1747,7 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
       // #endregion
       setToolStatus(null);
       setStatusMessages([]);
+      setIsGeneratingFlashcards(false);
       console.error('Error calling chat API:', error);
       setMessages((prev) => {
         const errorMessage: ChatMessage = {
@@ -1877,7 +1922,17 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
           ))}
           {isLoading && (
             <div className="mr-auto max-w-[90%] rounded-lg px-3 py-2 text-sm leading-relaxed bg-transparent space-y-1">
-              {statusMessages.length > 0 ? (
+              {isGeneratingFlashcards ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-pink-600 dark:text-pink-400 generating-flashcards">
+                    Generating flashcards...
+                  </span>
+                  <div className="relative">
+                    <div className="w-2 h-2 bg-pink-500 rounded-full animate-ping"></div>
+                    <div className="absolute inset-0 w-2 h-2 bg-pink-500 rounded-full"></div>
+                  </div>
+                </div>
+              ) : statusMessages.length > 0 ? (
                 <div className="space-y-1">
                   {statusMessages.map((status, index) => (
                     <div key={index} className="flex items-start gap-2 text-xs text-muted-foreground">
@@ -1903,46 +1958,210 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
         <div className="mb-3 overflow-x-auto scrollbar-thin">
           <div className="flex gap-2 w-max pb-1">
               {[
-                { id: 'audio-overview', label: 'Audio', icon: Music, bgColor: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
-                { id: 'video-overview', label: 'Video', icon: Video, bgColor: 'bg-green-100 dark:bg-green-900/30', iconColor: 'text-green-600 dark:text-green-400' },
-                { id: 'mind-map', label: 'Mind Map', icon: Network, bgColor: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
-                { id: 'reports', label: 'Reports', icon: FileTextIcon, bgColor: 'bg-yellow-100 dark:bg-yellow-900/30', iconColor: 'text-yellow-600 dark:text-yellow-400' },
-                { id: 'flashcards', label: 'Flashcards', icon: Layers, bgColor: 'bg-pink-100 dark:bg-pink-900/30', iconColor: 'text-pink-600 dark:text-pink-400' },
-                { id: 'quiz', label: 'Quiz', icon: HelpCircle, bgColor: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
-                { id: 'infographic', label: 'Infographic', icon: BarChart3, bgColor: 'bg-purple-100 dark:bg-purple-900/30', iconColor: 'text-purple-600 dark:text-purple-400' },
-                { id: 'slide-deck', label: 'Slide Deck', icon: Presentation, bgColor: 'bg-yellow-100 dark:bg-yellow-900/30', iconColor: 'text-yellow-600 dark:text-yellow-400' },
-                { id: 'data-table', label: 'Data Table', icon: Table, bgColor: 'bg-blue-100 dark:bg-blue-900/30', iconColor: 'text-blue-600 dark:text-blue-400' },
-                { id: 'calculator', label: 'Calculator', icon: Calculator, bgColor: 'bg-orange-100 dark:bg-orange-900/30', iconColor: 'text-orange-600 dark:text-orange-400' },
+                { id: 'flashcards', label: 'Flashcards', icon: Layers, bgColor: 'bg-pink-100 dark:bg-pink-900/30', selectedBgColor: 'bg-pink-300 dark:bg-pink-700/70', iconColor: 'text-pink-600 dark:text-pink-400', enabled: true },
+                { id: 'quiz', label: 'Quiz', icon: HelpCircle, bgColor: 'bg-blue-100 dark:bg-blue-900/30', selectedBgColor: 'bg-blue-300 dark:bg-blue-700/70', iconColor: 'text-blue-600 dark:text-blue-400', enabled: true },
+                { id: 'calculator', label: 'Calculator', icon: Calculator, bgColor: 'bg-orange-100 dark:bg-orange-900/30', selectedBgColor: 'bg-orange-300 dark:bg-orange-700/70', iconColor: 'text-orange-600 dark:text-orange-400', enabled: true },
+                { id: 'data-table', label: 'Data Table', icon: Table, bgColor: 'bg-blue-100 dark:bg-blue-900/30', selectedBgColor: 'bg-blue-300 dark:bg-blue-700/70', iconColor: 'text-blue-600 dark:text-blue-400', enabled: true },
+                { id: 'audio-overview', label: 'Audio', icon: Music, bgColor: 'bg-purple-100 dark:bg-purple-900/30', selectedBgColor: 'bg-purple-300 dark:bg-purple-700/70', iconColor: 'text-purple-600 dark:text-purple-400', enabled: false },
+                { id: 'video-overview', label: 'Video', icon: Video, bgColor: 'bg-green-100 dark:bg-green-900/30', selectedBgColor: 'bg-green-300 dark:bg-green-700/70', iconColor: 'text-green-600 dark:text-green-400', enabled: false },
+                { id: 'mind-map', label: 'Mind Map', icon: Network, bgColor: 'bg-purple-100 dark:bg-purple-900/30', selectedBgColor: 'bg-purple-300 dark:bg-purple-700/70', iconColor: 'text-purple-600 dark:text-purple-400', enabled: false },
+                { id: 'reports', label: 'Reports', icon: FileTextIcon, bgColor: 'bg-yellow-100 dark:bg-yellow-900/30', selectedBgColor: 'bg-yellow-300 dark:bg-yellow-700/70', iconColor: 'text-yellow-600 dark:text-yellow-400', enabled: false },
+                { id: 'infographic', label: 'Infographic', icon: BarChart3, bgColor: 'bg-purple-100 dark:bg-purple-900/30', selectedBgColor: 'bg-purple-300 dark:bg-purple-700/70', iconColor: 'text-purple-600 dark:text-purple-400', enabled: false },
+                { id: 'slide-deck', label: 'Slide Deck', icon: Presentation, bgColor: 'bg-yellow-100 dark:bg-yellow-900/30', selectedBgColor: 'bg-yellow-300 dark:bg-yellow-700/70', iconColor: 'text-yellow-600 dark:text-yellow-400', enabled: false },
               ].map((item) => {
                 const IconComponent = item.icon;
+                const isDisabled = !item.enabled;
+                const isSelected = selectedContentType === item.id && !isDisabled;
                 return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={cn(
-                      "relative flex items-center gap-2 px-3 py-2 rounded-lg",
-                      "min-w-[100px]",
-                      item.bgColor,
-                      "hover:opacity-80 transition-opacity",
-                      "border border-transparent hover:border-gray-300 dark:hover:border-gray-600"
-                    )}
-                    onClick={() => {
-                      // Handle button click - can be implemented later
-                      console.log(`Clicked ${item.label}`);
-                    }}
-                  >
-                    {item.isBeta && (
-                      <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-black text-white text-[10px] font-semibold rounded">
-                        BETA
+                  <div key={item.id} className="relative group">
+                    <button
+                      type="button"
+                      disabled={isDisabled}
+                      className={cn(
+                        "relative flex items-center gap-2 px-3 py-2 rounded-lg",
+                        "min-w-[100px]",
+                        isDisabled ? "opacity-50 grayscale cursor-not-allowed bg-gray-100 dark:bg-gray-800" : (isSelected ? item.selectedBgColor : item.bgColor),
+                        !isDisabled && "hover:opacity-80 transition-opacity",
+                        !isDisabled && "border border-transparent hover:border-gray-300 dark:hover:border-gray-600",
+                        isDisabled && "border border-transparent"
+                      )}
+                      onClick={async () => {
+                        if (isDisabled) return;
+                        
+                        // If flashcards button is clicked, automatically generate flashcards
+                        if (item.id === 'flashcards') {
+                          // Set selected state
+                          setSelectedContentType('flashcards');
+                          setIsGeneratingFlashcards(true);
+                          
+                          // Clear input
+                          setDraft("");
+                          
+                          // Trigger automatic flashcards generation
+                          // We'll simulate sending an empty message which will trigger flashcards generation
+                          const handleFlashcardsGeneration = async () => {
+                            try {
+                              setIsLoading(true);
+                              
+                              // Get journal content
+                              let journalContext = '';
+                              if (journalId) {
+                                const { data: journalData } = await supabase
+                                  .from("journals")
+                                  .select("content, title")
+                                  .eq("id", journalId)
+                                  .single();
+                                
+                                if (journalData?.content) {
+                                  const tempDiv = document.createElement("div");
+                                  tempDiv.innerHTML = journalData.content;
+                                  const journalText = tempDiv.textContent || tempDiv.innerText || journalData.content;
+                                  journalContext = `\n\n--- Journal Content ---\nTitle: ${journalData.title || 'Untitled'}\nContent: ${journalText.substring(0, 5000)}`;
+                                }
+                              }
+                              
+                              // Create user message
+                              const userMessage: ChatMessage = {
+                                id: id(),
+                                role: "user",
+                                content: "Generate flashcards based on the journal content",
+                                files: uploadedFiles
+                              };
+                              
+                              setMessages(prev => [...prev, userMessage]);
+                              
+                              // Prepare API messages
+                              const apiMessages = [
+                                {
+                                  role: 'system' as const,
+                                  content: 'You are a helpful assistant that creates flashcards from journal content. Generate exactly 8 flashcards covering key concepts.'
+                                },
+                                {
+                                  role: 'user' as const,
+                                  content: `Create flashcards based on the journal content. Generate exactly 8 flashcards that cover the key concepts. Format your response as follows:
+
+FLASHCARDS_TITLE: [Brief title for the flashcards]
+
+CARD 1:
+FRONT: [Question or term]
+BACK: [Answer or definition]
+
+CARD 2:
+FRONT: [Question or term]
+BACK: [Answer or definition]
+
+[etc. for 8 cards]
+
+${journalContext}${uploadedFiles.length > 0 ? `\n\n--- Attached Files ---\n${uploadedFiles.map(file => `## File: ${file.name}\n\`\`\`\n${file.content}\n\`\`\``).join('\n')}` : ''}`
+                                }
+                              ];
+                              
+                              let assistantContent = "";
+                              
+                              await streamChat({
+                                messages: apiMessages,
+                                journalTitle: journalTitle || 'Untitled',
+                                researchEnabled: false,
+                                onDelta: (chunk) => {
+                                  assistantContent += chunk;
+                                  setMessages(prev => {
+                                    const last = prev[prev.length - 1];
+                                    if (last?.role === "assistant") {
+                                      return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantContent } : m));
+                                    } else {
+                                      return [...prev, { id: id(), role: "assistant", content: assistantContent }];
+                                    }
+                                  });
+                                },
+                                onDone: () => {
+                                  const flashcardsData = parseFlashcardsResponse(assistantContent);
+                                  if (flashcardsData && onFlashcardsGenerated) {
+                                    onFlashcardsGenerated(flashcardsData);
+                                    setIsGeneratingFlashcards(false);
+                                    setSelectedContentType(null);
+                                    setMessages((prev) => {
+                                      const updatedMessages = [
+                                        ...prev.slice(0, -1),
+                                        {
+                                          id: id(),
+                                          role: "assistant" as const,
+                                          content: `✅ Done! Your flashcards have been generated and added to your journal.`
+                                        },
+                                      ];
+                                      return updatedMessages;
+                                    });
+                                  } else {
+                                    setIsLoading(false);
+                                    setIsGeneratingFlashcards(false);
+                                    setSelectedContentType(null);
+                                    toast({
+                                      title: "Error parsing flashcards",
+                                      description: "Failed to parse flashcards response. Please try again.",
+                                      variant: "destructive"
+                                    });
+                                  }
+                                  setIsLoading(false);
+                                },
+                                onError: (error) => {
+                                  setIsLoading(false);
+                                  setIsGeneratingFlashcards(false);
+                                  setSelectedContentType(null);
+                                  toast({
+                                    title: "Error generating flashcards",
+                                    description: error || "Failed to generate flashcards. Please try again.",
+                                    variant: "destructive"
+                                  });
+                                }
+                              });
+                            } catch (error) {
+                              console.error('Error generating flashcards:', error);
+                              setIsLoading(false);
+                              setIsGeneratingFlashcards(false);
+                              setSelectedContentType(null);
+                              toast({
+                                title: "Error generating flashcards",
+                                description: "Failed to generate flashcards. Please try again.",
+                                variant: "destructive"
+                              });
+                            }
+                          };
+                          
+                          handleFlashcardsGeneration();
+                          return;
+                        }
+                        
+                        // For other buttons, toggle selection
+                        if (selectedContentType === item.id) {
+                          setSelectedContentType(null);
+                        } else {
+                          setSelectedContentType(item.id);
+                        }
+                      }}
+                    >
+                      {item.isBeta && (
+                        <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-black text-white text-[10px] font-semibold rounded">
+                          BETA
+                        </span>
+                      )}
+                      <div className="relative flex items-center justify-center flex-shrink-0">
+                        <IconComponent className={cn(
+                          "w-4 h-4",
+                          isDisabled ? "text-gray-400 dark:text-gray-500" : item.iconColor
+                        )} />
+                      </div>
+                      <span className={cn(
+                        "text-xs font-medium whitespace-nowrap leading-tight transition-opacity",
+                        isDisabled ? "text-gray-400 dark:text-gray-500 group-hover:opacity-0" : "text-gray-700 dark:text-gray-300"
+                      )}>
+                        {item.label}
+                      </span>
+                    </button>
+                    {isDisabled && (
+                      <span className="absolute inset-0 flex items-center justify-center text-xs font-medium text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none px-3">
+                        Coming next update
                       </span>
                     )}
-                    <div className="relative flex items-center justify-center flex-shrink-0">
-                      <IconComponent className={cn("w-4 h-4", item.iconColor)} />
-                    </div>
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap leading-tight">
-                      {item.label}
-                    </span>
-                  </button>
+                  </div>
                 );
               })}
           </div>
@@ -2115,6 +2334,19 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
                 >
                   <Plus className="w-4 h-4" />
                 </button>
+                {/* Microphone Icon - Transcribe Notes */}
+                <button 
+                  type="button"
+                  onClick={() => {
+                    console.log("Transcribe button clicked in ChatbotSidebar");
+                    setTranscribeOpen(true);
+                  }}
+                  disabled={isLoading}
+                  className="flex items-center justify-center w-4 h-4 text-gray-700 dark:text-[#F3FAF9] hover:text-gray-900 dark:hover:text-[#F3FAF9] transition-colors mt-0.5 flex-shrink-0"
+                  title="Transcribe notes"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
 
                 {/* Textarea */}
                 <LinkTextarea
@@ -2168,7 +2400,15 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
                       setCitationStyleMenu(null);
                     }
                   }}
-                  placeholder={isLoading ? "Waiting for response..." : "Ask about this journal…"}
+                  placeholder={
+                    isLoading 
+                      ? "Waiting for response..." 
+                      : selectedContentType === 'flashcards'
+                      ? "Type what you want the flashcards to be about..."
+                      : selectedContentType === 'quiz'
+                      ? "Type what you want the quiz to be about..."
+                      : "Ask about this journal…"
+                  }
                   className="flex-1 min-h-[44px] max-h-32 resize-none pr-20 pl-0 text-sm bg-transparent text-gray-900 dark:text-[#F3FAF9] placeholder:text-gray-500 dark:placeholder:text-[#F3FAF9]/60 focus:outline-none focus:ring-0"
                   disabled={isLoading}
                   slashCommands={CHAT_SLASH_COMMANDS.map(cmd => cmd.command)}
@@ -2278,6 +2518,18 @@ Generate at least 5 questions on the topic "${quizTopic}".${currentFiles.length 
             onClose={() => setCitationStyleMenu(null)}
           />
         )}
+
+        <TranscribeNotes
+          open={transcribeOpen}
+          onClose={() => setTranscribeOpen(false)}
+          onAddToJournal={(transcript) => {
+            if (onInsertContent && transcript.trim()) {
+              onInsertContent(transcript);
+              setTranscribeOpen(false);
+              toast({ title: "Transcript added to journal" });
+            }
+          }}
+        />
       </div>
     </aside>
   );
